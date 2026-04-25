@@ -4,8 +4,8 @@
 
 SpecIA comes in two editions optimized for different use cases:
 
-- **Lite**: Quick security checks (review + audit), zero dependencies, 7x cheaper
-- **Full**: Complete compliance workflow with state, MCP server, audit trail
+- **Lite**: Quick security checks (review + audit), zero dependencies, minimal setup
+- **Full**: Complete spec-driven workflow with state persistence, MCP server, and audit trail
 
 ## Feature Comparison Matrix
 
@@ -31,8 +31,7 @@ SpecIA comes in two editions optimized for different use cases:
 | **Abuse Cases** | ❌ No | ✅ Yes (5-10 scenarios) |
 | **Mitigations** | 1-sentence fix | Detailed remediation |
 | **Output Size** | ~500 tokens | ~3000 tokens |
-| **Time** | ~15 seconds | ~2 minutes |
-| **Cost** | ~$0.009 | ~$0.06 |
+| **Analysis Time** | ~15 seconds | ~2 minutes |
 
 **Example: Lite Review**
 ```markdown
@@ -100,8 +99,7 @@ OAuth 2.0 authorization code grant without PKCE is vulnerable to code intercepti
 | **Abuse Case Testing** | ❌ No | ✅ Exploit scenarios |
 | **Evidence Collection** | File paths | Execution logs |
 | **Output Size** | ~800 tokens | ~5000 tokens |
-| **Time** | ~30 seconds | ~5 minutes |
-| **Cost** | ~$0.020 | ~$0.15 |
+| **Analysis Time** | ~30 seconds | ~5 minutes |
 
 **Example: Lite Audit**
 ```markdown
@@ -178,7 +176,6 @@ Merge PR
 ```
 
 **Total time**: ~1 minute  
-**Total cost**: ~$0.03  
 **Artifacts**: None (inline output only)
 
 ### SpecIA Full Workflow
@@ -206,7 +203,6 @@ specia done → Archive change
 ```
 
 **Total time**: ~10 minutes  
-**Total cost**: ~$0.35  
 **Artifacts**: 10+ files in `.specia/changes/{name}/`, archived to `.specia/specs/`
 
 ## Use Case Decision Tree
@@ -218,7 +214,7 @@ Do you need compliance audit trail?
     ├─ Is this a high-security feature (auth, payment, PII)?
     │   ├─ YES → Use Full
     │   └─ NO
-    │       ├─ Do you have budget for full analysis (~$0.35/feature)?
+    │       ├─ Do you need dynamic test execution and abuse case testing?
     │       │   ├─ YES → Use Full (more thorough)
     │       │   └─ NO → Use Lite
     │       └─ Is this a quick PR review?
@@ -232,9 +228,10 @@ Do you need compliance audit trail?
 - PR security reviews
 - Individual developer quick checks
 - Continuous security (every commit)
-- Budget-constrained projects
-- Prototyping / early development
+- Rapid iteration and prototyping
+- Early development stages
 - You already have specs (not using SpecIA workflow)
+- Quick validation of critical threats only
 
 ❌ **NOT suitable for:**
 - Compliance requirements (SOC 2, PCI-DSS, HIPAA)
@@ -268,19 +265,19 @@ Do you need compliance audit trail?
    - Install SpecIA Lite
    - Run specia-review-lite on every feature spec
    - Run specia-audit-lite before merging
-   - Cost: ~$0.03/feature
+   - Get quick feedback on critical threats
 
 2. **Phase 2: Full for critical features**
    - Install SpecIA Full
    - Use Lite for routine features
    - Use Full for auth, payment, PII features
-   - Cost: ~$0.03/routine + ~$0.35/critical
+   - Lite provides speed, Full provides depth
 
 3. **Phase 3: Full for everything (compliance mode)**
    - Migrate all new features to Full workflow
    - Keep Lite for quick checks
    - Use Lite findings as input to Full review
-   - Cost: ~$0.35/feature
+   - Full audit trail for all production code
 
 ### Hybrid Workflow
 
@@ -302,48 +299,13 @@ specia continue  # Full workflow (~10min)
 specia done
 ```
 
-## Cost Analysis: 100 Features
-
-| Edition | Cost per Feature | 100 Features | Savings |
-|---------|------------------|--------------|---------|
-| Lite | $0.03 | $3.00 | Baseline |
-| Full | $0.35 | $35.00 | - |
-| Hybrid (80% Lite, 20% Full) | - | $9.40 | $25.60 saved |
-
-**Hybrid strategy saves 73% vs Full-only**
-
-## Token Breakdown
-
-### SpecIA Lite
-
-| Phase | Input Tokens | Output Tokens | Total | Cost (Claude 3.5 Sonnet) |
-|-------|--------------|---------------|-------|--------------------------|
-| specia-review-lite | ~2000 | ~500 | ~2500 | ~$0.009 |
-| specia-audit-lite | ~5000 | ~800 | ~5800 | $0.020 |
-| **Total** | **~7000** | **~1300** | **~9600** | **$0.029** |
-
-### SpecIA Full
-
-| Phase | Input Tokens | Output Tokens | Total | Cost |
-|-------|--------------|---------------|-------|------|
-| specia-explore | ~6000 | ~2000 | ~8000 | $0.024 |
-| specia-propose | ~4000 | ~1000 | ~5000 | $0.015 |
-| specia | ~8000 | ~4000 | ~12000 | $0.036 |
-| specia-review | ~15000 | ~5000 | ~20000 | $0.060 |
-| specia-tasks | ~8000 | ~2000 | ~10000 | $0.030 |
-| specia-apply | ~8000 | ~2000 | ~10000 | $0.030 |
-| specia-audit | ~40000 | ~10000 | ~50000 | $0.150 |
-| **Total** | **~89000** | **~26000** | **~115000** | **$0.345** |
-
-**Full is 12x more expensive but provides 5x more depth**
-
 ## Summary
 
 | Metric | Lite | Full | Winner |
 |--------|------|------|--------|
 | **Setup Time** | <1 min | ~5 min | Lite |
 | **Execution Time** | ~45s | ~10 min | Lite |
-| **Cost per Feature** | $0.03 | $0.35 | Lite (12x cheaper) |
+| **Dependencies** | None | Node.js 20+ | Lite (zero deps) |
 | **Threat Coverage** | Critical/High only | All severities | Full |
 | **Test Execution** | ❌ Static | ✅ Dynamic | Full |
 | **Abuse Cases** | ❌ No | ✅ Yes | Full |
@@ -351,4 +313,4 @@ specia done
 | **Compliance Audit** | ❌ No | ✅ Yes | Full |
 | **Learning (Memory)** | ❌ No | ✅ Yes | Full |
 
-**Recommendation**: Start with Lite for 80% of features, upgrade to Full for critical 20%.
+**Recommendation**: Use Lite for rapid iteration and PR reviews (80% of features), upgrade to Full for critical features and compliance requirements (20%).

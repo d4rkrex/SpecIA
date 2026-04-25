@@ -51,7 +51,7 @@ Recommendation: BLOCK (must fix before implementation)
 Verdict: APPROVE (safe to ship)
 ```
 
-**Total time: 45 seconds | Total cost: $0.03**
+**Total time: 45 seconds**
 
 This is what SpecIA does. Security review → Implementation → Audit. All automated.
 
@@ -59,9 +59,9 @@ This is what SpecIA does. Security review → Implementation → Audit. All auto
 
 ## Why SpecIA?
 
-**Security bugs caught at design time are 100x cheaper to fix than in production.**
+**Security bugs caught at design time are 100x easier to fix than in production.**
 
-- ❌ **Without SpecIA**: Security review happens after code is written → expensive rewrites, missed deadlines
+- ❌ **Without SpecIA**: Security review happens after code is written → time-consuming rewrites, missed deadlines
 - ✅ **With SpecIA**: Security review happens at spec stage → fix design, implement once, ship secure
 
 **What SpecIA catches:**
@@ -119,7 +119,6 @@ SpecIA comes in two flavors:
 **Fast, lightweight, zero dependencies.**
 
 - ⚡ ~30 seconds per feature
-- 💰 ~$0.03 per feature
 - 📦 No Node.js, no MCP server
 - ✅ Perfect for: PR reviews, quick checks, individual developers
 
@@ -138,7 +137,6 @@ cd SpecIA/full
 ```
 
 - 🏗️ ~5-10 minutes per feature
-- 💰 ~$0.22 per feature
 - 📋 State persistence (.specia/ directory + Alejandría memory)
 - ✅ Perfect for: Release gates, compliance, high-security features
 
@@ -158,7 +156,6 @@ cd SpecIA/full
 | Code audit | ✅ Static checks | ✅ + Test execution |
 | Abuse cases | ❌ | ✅ Attacker scenarios |
 | Time | ~30 sec | ~5-10 min |
-| Cost | $0.03 | $0.22 |
 | Dependencies | None | Node.js 20+ |
 | State persistence | ❌ | ✅ .specia/ + Alejandría |
 

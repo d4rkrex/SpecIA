@@ -1,7 +1,7 @@
 # SpecIA Decision Tree: ¿Lite o Full?
 
 **Guía rápida para desarrolladores y líderes técnicos**  
-**Enfoque**: Optimización de tokens
+**Enfoque**: Security-first workflow selection
 
 ---
 
@@ -39,8 +39,7 @@
 │VT-SPEC │  │VT-SPEC │        │VT-SPEC │  │VT-SPEC │
 │  FULL  │  │  FULL  │        │  LITE  │  │  LITE  │
 │        │  │        │        │        │  │  FULL  │
-│135k tok│  │70k tok │        │9.6k tok│  │(choose)│
-│~10min  │  │~8min   │        │~45sec  │  │        │
+│~10min  │  │~8min   │        │~45sec  │  │(choose)│
 │        │  │        │        │        │  │        │
 │Audit   │  │Exploit │        │Quick   │  │Depends │
 │trail   │  │testing │        │check   │  │on risk │
@@ -71,14 +70,14 @@
 
 ## 🎯 Casos de Uso Comunes
 
-### ✅ SpecIA LITE (9.6k tokens)
+### ✅ SpecIA LITE (~45 segundos)
 
 #### 1. PR Review Rápido
 ```bash
 Scenario: Code review de PR pequeño (50 líneas)
 Command: specia-review-lite src/components/Button.tsx
 Time: ~15 segundos
-Tokens: ~3k input + ~400 output = 3.4k total
+Security Focus: XSS, client-side validation bypass
 Output: 3 threats (1 high: XSS in onClick handler)
 ```
 
@@ -87,7 +86,7 @@ Output: 3 threats (1 high: XSS in onClick handler)
 Scenario: Dev quiere quick check antes de commit
 Command: specia-review-lite src/api/users.ts
 Time: ~15 segundos
-Tokens: ~3k input + ~350 output = 3.35k total
+Security Focus: SQL injection, input validation
 Output: 2 threats (SQL injection risk en query builder)
 ```
 
@@ -96,7 +95,7 @@ Output: 2 threats (SQL injection risk en query builder)
 Scenario: Nueva landing page (solo markup + CSS)
 Command: specia-review-lite src/pages/landing.tsx
 Time: ~15 segundos
-Tokens: ~2.8k input + ~200 output = 3k total
+Security Focus: XSS, CSP compliance
 Output: 0 threats (low-risk UI code)
 ```
 
@@ -105,7 +104,7 @@ Output: 0 threats (low-risk UI code)
 Scenario: Rename variable `getUserData` → `fetchUserProfile`
 Command: specia-review-lite src/services/user.ts
 Time: ~15 segundos
-Tokens: ~2.5k input + ~150 output = 2.65k total
+Security Focus: Behavior preservation check
 Output: 0 threats (behavior unchanged)
 ```
 
@@ -114,18 +113,15 @@ Output: 0 threats (behavior unchanged)
 Scenario: Spike técnico — probar librería nueva
 Command: specia-review-lite spike/redis-client.ts
 Time: ~15 segundos
-Tokens: ~3.2k input + ~300 output = 3.5k total
+Security Focus: Connection security, credential handling
 Output: 1 threat (conexión sin TLS)
 ```
 
-**Token savings vs v1**: 
-- v1: ~45k tokens (review completa con MCP overhead)
-- Lite: ~3.4k tokens promedio
-- Ahorro: **~41.6k tokens (92% reducción)**
+**Cuándo usar Lite**: Low-risk changes, quick feedback loops, pre-commit validation
 
 ---
 
-### ✅ SpecIA FULL (70k-135k tokens)
+### ✅ SpecIA FULL (8-12 minutos)
 
 #### 1. OAuth Login
 ```bash
@@ -133,14 +129,7 @@ Scenario: Implementar login con Google OAuth
 Command: specia new add-oauth-login
 Phases: explore → propose → spec → review → tasks → apply → audit
 Time: ~10 minutos (total workflow)
-Tokens: ~135k total
-  - Explore: 4k
-  - Propose: 3k
-  - Spec: 6k
-  - Review: 28k (con abuse cases)
-  - Tasks: 4k
-  - Apply: 40k
-  - Audit: 50k (dynamic testing)
+Security Focus: STRIDE threats, abuse cases, session security
   
 Output:
   - 7 STRIDE threats
@@ -154,15 +143,13 @@ Output:
 Scenario: Agregar checkout con Stripe
 Command: specia new add-stripe-checkout
 Time: ~10 minutos
-Tokens: ~140k total
-  - Exploration: PCI-DSS SAQ A-EP requirements (5k)
-  - Review: 30k (webhook security + abuse cases)
-  - Audit: 55k (webhook signature testing, idempotency verification)
+Security Focus: PCI-DSS requirements, webhook security, financial abuse
   
 Output:
   - 9 STRIDE threats (webhook spoofing, replay attacks, amount tampering)
   - 5 abuse cases (fraudulent charges, refund abuse, price manipulation)
   - 15 tasks (10 implementation + 5 mitigations)
+  - Compliance: PCI-DSS SAQ A-EP validated
 ```
 
 #### 3. Admin Panel con RBAC
@@ -170,14 +157,13 @@ Output:
 Scenario: Panel de administración con roles
 Command: specia new add-admin-panel
 Time: ~8 minutos
-Tokens: ~95k total
-  - Review: 25k (privilege escalation focus)
-  - Audit: 45k (RBAC matrix testing)
+Security Focus: Privilege escalation, IDOR, access control matrix
   
 Output:
   - 8 STRIDE threats (privilege escalation, IDOR, CSRF)
   - 6 abuse cases (horizontal/vertical privilege escalation, session hijack)
   - 18 tasks (12 implementation + 6 mitigations)
+  - Audit: RBAC matrix testing with exploit attempts
 ```
 
 #### 4. File Upload con S3
@@ -185,14 +171,13 @@ Output:
 Scenario: Upload de imágenes a S3
 Command: specia new add-image-upload
 Time: ~10 minutos
-Tokens: ~125k total
-  - Review: 32k (path traversal, malware, SSRF focus)
-  - Audit: 48k (file type validation testing, size limits)
+Security Focus: Path traversal, malware, SSRF, DoS via file bombs
   
 Output:
   - 10 STRIDE threats (path traversal, XXE, malware upload, SSRF)
   - 5 abuse cases (shell upload, XSS via SVG, DoS via bomb files)
   - 16 tasks (11 implementation + 5 mitigations)
+  - Audit: File validation testing, size limits, MIME type enforcement
 ```
 
 #### 5. Public REST API
@@ -200,37 +185,16 @@ Output:
 Scenario: API REST pública para partners
 Command: specia new add-partner-api
 Time: ~12 minutos
-Tokens: ~150k total
-  - Exploration: OWASP API Top 10 research (6k)
-  - Review: 35k (API-specific threats + abuse cases)
-  - Audit: 60k (rate limiting verification, auth testing)
+Security Focus: OWASP API Top 10, rate limiting, data exposure
   
 Output:
   - 12 STRIDE threats (broken auth, excessive data exposure, rate limiting)
   - 7 abuse cases (API key theft, data scraping, DoS)
   - 20 tasks (14 implementation + 6 mitigations)
+  - Compliance: OWASP API Security Top 10 validated
 ```
 
-**Token cost vs v1**:
-- v1: ~120k tokens (sin exploration, sin abuse cases, audit estática)
-- Full: ~135k tokens promedio (con exploration + abuse cases + audit dinámica)
-- Incremento: +15k tokens (12.5%)
-- Valor: Exploration evita ~50k tokens de re-work → ROI neto: **-35k tokens**
-
----
-
-## 💰 Comparación de Tokens por Caso de Uso
-
-| Caso de Uso | Lite | Full | Diferencia | Cuándo Full vale la pena |
-|-------------|------|------|------------|--------------------------|
-| PR review (UI) | 3.4k | 135k | +131.6k | ❌ Nunca (Lite suficiente) |
-| Refactor | 2.65k | 70k | +67.35k | ❌ Nunca (Lite suficiente) |
-| CRUD endpoint | 3.5k | 70k | +66.5k | ⚠️ Depende (si tiene authz → Full) |
-| OAuth login | ❌ N/A | 135k | — | ✅ Siempre (abuse cases críticos) |
-| Payment | ❌ N/A | 140k | — | ✅ Siempre (compliance required) |
-| File upload | ❌ N/A | 125k | — | ✅ Siempre (high attack surface) |
-| Admin panel | ❌ N/A | 95k | — | ✅ Siempre (privilege escalation risk) |
-| Public API | ❌ N/A | 150k | — | ✅ Siempre (OWASP API Top 10) |
+**Cuándo usar Full**: High-risk features, compliance-required changes, audit trail needed
 
 ---
 
@@ -242,8 +206,8 @@ Output:
 # Step 1: Quick check con Lite
 specia-review-lite src/auth/login.ts
 
-# Output (400 tokens):
-🚀 SpecIA LITE Review | ~15s | ~3.4k tokens | Critical/High Only
+# Output (~15 segundos):
+🚀 SpecIA LITE Review | Critical/High Only
 
 Threats Found: 3
   [CRITICAL] T-001: SQL injection in login query (line 42)
@@ -261,73 +225,14 @@ specia spec fix-login-security  # Copia findings de Lite
 specia review fix-login-security --api
 specia tasks fix-login-security
 
-# Output (Full review: 28k tokens):
+# Output (Full review: ~10 minutos):
 ✅ 12 threats found (5 critical, 4 high, 3 medium)
 ✅ 6 abuse cases documented (credential stuffing, brute force, session fixation)
 ✅ 14 tasks generated (9 implementation + 5 security mitigations)
 ```
 
-**Tokens total**: 3.4k (Lite) + 135k (Full) = **138.4k**  
-**vs Full-only**: 135k  
-**Overhead**: +3.4k tokens (2.5%)
-
-**Valor**: Lite triage rápido (15 seg) → Full deep dive solo si needed
-
----
-
-## 📊 ROI por Tipo de Feature
-
-### Low-Risk Features (UI, Docs, Refactors)
-
-```yaml
-Volume: 60% de features
-Strategy: SpecIA Lite
-Tokens per feature: ~3.4k
-Annual tokens (60 features): 204k
-
-vs v1:
-  - v1: 60 × 120k = 7.2M tokens
-  - Lite: 204k tokens
-  - Ahorro: 7M tokens (97% reducción)
-```
-
-### Medium-Risk Features (APIs, Integraciones)
-
-```yaml
-Volume: 30% de features
-Strategy: SpecIA Lite (con upgrade path a Full si needed)
-Tokens per feature: ~3.5k (avg, 90% stay Lite)
-Upgrade rate: 10% → Full (135k × 3 = 405k)
-Annual tokens (30 features): (27 × 3.5k) + 405k = 500k
-
-vs v1:
-  - v1: 30 × 120k = 3.6M tokens
-  - Hybrid: 500k tokens
-  - Ahorro: 3.1M tokens (86% reducción)
-```
-
-### High-Risk Features (Auth, Payment, PII)
-
-```yaml
-Volume: 10% de features
-Strategy: SpecIA Full (always)
-Tokens per feature: ~135k
-Annual tokens (10 features): 1.35M
-
-vs v1:
-  - v1: 10 × 120k = 1.2M tokens
-  - Full: 1.35M tokens
-  - Incremento: +150k tokens (12.5%)
-  
-Valor: 
-  - Exploration evita re-work: -50k tokens per feature
-  - ROI neto: 1.35M - 500k (re-work saved) = 850k tokens efectivos
-  - vs v1: 1.2M - 850k = 350k tokens ahorrados (29% reducción)
-```
-
-**Total Annual Tokens (Hybrid)**: 204k + 500k + 1.35M = **2.05M**  
-**vs v1**: 7.2M + 3.6M + 1.2M = **12M**  
-**Ahorro**: **9.95M tokens (83% reducción)**
+**Workflow timing**: ~15 segundos (Lite triage) + ~10 minutos (Full deep dive when needed)  
+**Value**: Quick risk assessment before investing in comprehensive analysis
 
 ---
 
@@ -337,56 +242,44 @@ Valor:
 
 ```yaml
 Monthly features:
-  - 8 CRUD endpoints → Lite (8 × 3.5k = 28k)
-  - 4 integraciones internas → Lite (4 × 3.5k = 14k)
-  - 2 APIs públicas → Full (2 × 150k = 300k)
-  - 1 auth feature → Full (1 × 135k = 135k)
+  - 8 CRUD endpoints → Lite (~2 min total)
+  - 4 integraciones internas → Lite (~1 min total)
+  - 2 APIs públicas → Full (~20 min total)
+  - 1 auth feature → Full (~10 min total)
   
-Monthly tokens: 477k
-Annual tokens: 5.7M
-
-vs v1 Full-only:
-  - 15 features × 120k = 1.8M/mes
-  - Annual: 21.6M
-  
-Savings: 15.9M tokens/año (74% ahorro)
+Security coverage:
+  - Low-risk: Lite provides quick validation
+  - High-risk: Full workflow with audit trail
+  - Compliance: Full workflow ensures documentation
 ```
 
 ### Squad Frontend (4 devs, React)
 
 ```yaml
 Monthly features:
-  - 12 UI components → Lite (12 × 3.4k = 41k)
-  - 3 forms con validación → Lite (3 × 3.5k = 10.5k)
-  - 1 OAuth integration → Full (1 × 135k = 135k)
-  
-Monthly tokens: 186.5k
-Annual tokens: 2.2M
+  - 12 UI components → Lite (~3 min total)
+  - 3 forms con validación → Lite (~45 sec total)
+  - 1 OAuth integration → Full (~10 min total)
 
-vs v1 Full-only:
-  - 16 features × 120k = 1.92M/mes
-  - Annual: 23M
-  
-Savings: 20.8M tokens/año (90% ahorro)
+Security coverage:
+  - UI components: Quick XSS/CSP checks
+  - Forms: Input validation review
+  - Auth: Full STRIDE + abuse case analysis
 ```
 
 ### Squad Full-Stack (6 devs, monolito)
 
 ```yaml
 Monthly features:
-  - 6 CRUD features → Lite (6 × 3.5k = 21k)
-  - 4 UI pages → Lite (4 × 3.4k = 13.6k)
-  - 3 APIs → Full (3 × 150k = 450k)
-  - 2 auth/payment → Full (2 × 140k = 280k)
-  
-Monthly tokens: 764.6k
-Annual tokens: 9.2M
+  - 6 CRUD features → Lite (~1.5 min total)
+  - 4 UI pages → Lite (~1 min total)
+  - 3 APIs → Full (~36 min total)
+  - 2 auth/payment → Full (~20 min total)
 
-vs v1 Full-only:
-  - 15 features × 120k = 1.8M/mes
-  - Annual: 21.6M
-  
-Savings: 12.4M tokens/año (57% ahorro)
+Security coverage:
+  - CRUD: Lite catches common issues
+  - UI: Quick security review
+  - APIs/Auth/Payment: Full compliance workflow
 ```
 
 ---
@@ -398,15 +291,17 @@ Savings: 12.4M tokens/año (57% ahorro)
 ```bash
 # 1. Check rápido (siempre safe)
 specia-review-lite path/to/file.ts
-# Tokens: ~3.4k
+# Time: ~15 segundos
+# Coverage: Critical/High severity threats
 
 # 2. Si detectas riesgo alto → upgrade
 specia new fix-security-issue
 specia ff fix-security-issue
-# Tokens: ~135k (pero evita 50k en re-work)
+# Time: ~10 minutos
+# Coverage: Full STRIDE + abuse cases + dynamic audit
 
 # 3. Guardian te avisa si falta mitigation
-git commit  # Layer 1-3: 0 tokens, Layer 4b: ~9.2k tokens (1% de commits)
+git commit  # Layer 1-3: Instant, Layer 4b: fallback validation
 ```
 
 ### Para Code Reviewers
@@ -414,7 +309,8 @@ git commit  # Layer 1-3: 0 tokens, Layer 4b: ~9.2k tokens (1% de commits)
 ```bash
 # 1. PR review automático
 specia-review-lite path/to/changed/files.ts > review-comment.md
-# Tokens: ~3.4k (vs manual review: 0 tokens pero 30 min de tiempo)
+# Time: ~15 segundos vs 30 min manual review
+# Focus: Security-specific findings
 
 # 2. Pega output en PR comment
 # 3. Si findings críticos → requiere Full workflow
@@ -423,113 +319,17 @@ specia-review-lite path/to/changed/files.ts > review-comment.md
 ### Para Tech Leads
 
 ```bash
-# 1. Track token consumption
-specia stats --output monthly-stats.json
-
-{
-  "total_tokens": 2050000,
-  "lite_usage": 720000,   # 35%
-  "full_usage": 1330000,  # 65%
-  "avg_per_feature": 25625,
-  "savings_vs_v1": 9950000  # 83%
-}
-
-# 2. Setup bake config para optimizar
+# 1. Define security requirements by feature type
 cat > ~/.specia-bakes/squad.yaml <<EOF
-guardian:
-  spec_validation:
-    enable_llm: false  # Start heuristic-only (0 tokens)
+security_policy:
+  auth_payment: full_required
+  public_api: full_required
+  internal_crud: lite_acceptable
+  ui_only: lite_acceptable
 EOF
-```
 
----
-
-## 🔧 Optimizaciones Avanzadas
-
-### 1. Guardian Layer 4b: Heuristic-Only
-
-```yaml
-Default: L4a (heuristic) + L4b (LLM fallback)
-  - Tokens: 92 tokens/commit avg (1% need LLM)
-
-Optimization: Heuristic-only
-  - Config: spec_validation.enable_llm: false
-  - Tokens: 0 tokens/commit
-  - Trade-off: -5% detection accuracy
-  
-Recomendación: Start heuristic-only, enable LLM después de 2 semanas
-```
-
-### 2. MCP Opt-Out
-
-```yaml
-Default (v1): MCP siempre activo
-  - Overhead: ~5k tokens/feature
-
-v2 CLI-first: MCP optional
-  - Install: ./install.sh --no-mcp
-  - Overhead: 0 tokens
-  
-Cuándo SÍ usar MCP:
-  - Workflow multi-session (>2 horas)
-  - Alejandría recovery needed
-  
-Cuándo NO usar MCP:
-  - Quick features (<2 horas)
-  - CI/CD automation
-```
-
-### 3. Exploration Auto-Trigger Tuning
-
-```yaml
-Default: Auto-trigger en keywords sensibles
-  - Tokens: +4k por feature sensible
-  - Ahorra: ~50k en re-work
-  
-Optimization: Tune keywords
-  - Config: explore.keywords (custom list)
-  - Reduce false triggers: -30% exploration calls
-  - Tokens saved: ~1.2k per avoided exploration
-```
-
----
-
-## 📞 ¿Necesitas Ayuda?
-
-**Slack**: `#ask-appsec`  
-**Docs**: 
-  - `docs/comparison.md` — Lite vs Full detallado
-  - `docs/v1-to-v2-migration.md` — Token optimizations
-**Issues**: `github.com/d4rkrex/SpecIA/issues`
-
----
-
-## 📈 Token Budget Planning
-
-### Calculator de Tokens Mensuales
-
-```python
-# Inputs
-crud_features = 8      # → Lite
-ui_features = 4        # → Lite
-api_features = 2       # → Full
-auth_features = 1      # → Full
-
-# Cálculo
-lite_tokens = (crud_features + ui_features) × 3500
-full_tokens = (api_features + auth_features) × 135000
-
-total = lite_tokens + full_tokens
-# = (12 × 3500) + (3 × 135000)
-# = 42,000 + 405,000
-# = 447,000 tokens/mes
-# = 5.36M tokens/año
-
-# vs v1
-v1_tokens = 15 × 120000 = 1.8M/mes = 21.6M/año
-
-# Ahorro
-savings = 21.6M - 5.36M = 16.24M tokens/año (75% reducción)
+# 2. Track compliance coverage
+specia stats --output monthly-security-coverage.json
 ```
 
 ---

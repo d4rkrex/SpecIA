@@ -2,7 +2,7 @@
 name: specia-review-lite
 description: >
   SpecIA LITE: Quick security review (STRIDE critical/high only).
-  Use for: PR reviews, quick checks, individual devs, budget-constrained.
+  Use for: PR reviews, quick checks, individual devs, fast feedback.
   NOT for: Compliance, high-security features (auth/payment/PII), audit trails.
   Trigger: "lite review", "quick security check", "PR review", "specia-review-lite".
 license: MIT
@@ -10,8 +10,6 @@ metadata:
   author: mroldan
   version: "1.0"
   edition: "lite"
-  tokens: ~3000
-  cost: ~$0.009
   time: ~15s
 ---
 
@@ -62,7 +60,7 @@ Return a concise report (max 500 tokens):
 
 ```markdown
 ---
-🚀 SpecIA LITE Review | ~15s | ~$0.009 | Critical/High Only
+🚀 SpecIA LITE Review | ~15s | Critical/High Only
 Edition: Lite | No abuse cases | No DREAD scoring | No audit trail
 For compliance review, use SpecIA Full workflow instead
 ---

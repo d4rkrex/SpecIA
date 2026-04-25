@@ -2,7 +2,7 @@
 name: specia-audit-lite
 description: >
   SpecIA LITE: Quick post-implementation audit (static checks only, no test execution).
-  Use for: PR reviews, quick validation, individual devs, budget-constrained.
+  Use for: PR reviews, quick validation, individual devs, fast feedback.
   NOT for: Compliance, dynamic testing, coverage reports, abuse case testing.
   Trigger: "lite audit", "quick audit", "PR audit", "specia-audit-lite".
 license: MIT
@@ -10,8 +10,6 @@ metadata:
   author: mroldan
   version: "1.0"
   edition: "lite"
-  tokens: ~6600
-  cost: ~$0.020
   time: ~30s
 ---
 
@@ -83,7 +81,7 @@ Return a concise report (max 800 tokens):
 
 ```markdown
 ---
-🚀 SpecIA LITE Audit | ~30s | ~$0.020 | Static Checks Only
+🚀 SpecIA LITE Audit | ~30s | Static Checks Only
 Edition: Lite | No test execution | No coverage report | No abuse case testing
 For dynamic audit with test execution, use SpecIA Full workflow instead
 ---
@@ -216,7 +214,6 @@ But for now, you're just doing a quick static check.
 | Coverage report | ❌ No | ✅ Yes (lcov/istanbul) |
 | Build verification | ❌ No | ✅ Runs `npm run build` |
 | Abuse case testing | ❌ No | ✅ Yes (exploit scenarios) |
-| Token cost | ~6.6k (~$0.020) | ~50k (~$0.150) |
 | Time | ~30 seconds | ~5 minutes |
 
 Choose **lite** for quick PR checks. Choose **full** for release gates.

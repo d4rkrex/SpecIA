@@ -204,8 +204,6 @@ User: "Run specia-review-lite on PR https://github.com/myorg/myapp/pull/123"
 | Metric | specia-review-lite | specia-review (full) |
 |--------|----------------|------------------|
 | Time | ~15 seconds | ~2 minutes |
-| Tokens | ~3k | ~20k |
-| Cost | ~$0.009 | ~$0.06 |
 | Threats reported | Critical/High only (5-10) | All severities (20-50) |
 | OWASP mapping | Mentioned if obvious | Full mapping with CWEs |
 | Abuse cases | No | Yes (5-10 scenarios) |
@@ -215,8 +213,6 @@ User: "Run specia-review-lite on PR https://github.com/myorg/myapp/pull/123"
 | Metric | specia-audit-lite | specia-audit (full) |
 |--------|---------------|-----------------|
 | Time | ~30 seconds | ~5 minutes |
-| Tokens | ~6.6k | ~50k |
-| Cost | ~$0.020 | ~$0.15 |
 | Test execution | ❌ Static check | ✅ Runs tests |
 | Build verification | ❌ No | ✅ Runs build |
 | Coverage report | ❌ No | ✅ Yes (lcov) |
@@ -227,7 +223,7 @@ User: "Run specia-review-lite on PR https://github.com/myorg/myapp/pull/123"
 - PR reviews
 - Individual dev quick checks
 - Continuous security (every commit)
-- Budget-constrained projects
+- Fast feedback loops
 
 **When to use Full:**
 - Release gates

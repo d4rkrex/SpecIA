@@ -1,0 +1,33 @@
+# SpecIA Configuration Example
+# Copy to .specia/config.yaml and customize
+
+version: "0.1"
+
+project:
+  name: MyProject
+  description: Project description
+  stack: TypeScript/Node.js  # or Python/Django, Go, Rust, etc.
+  conventions: []
+
+security:
+  posture: standard  # standard | elevated | paranoid
+  # standard: STRIDE light — top risks, risk levels, one-line mitigations
+  # elevated: Full STRIDE + OWASP Top 10 mapping, threat scenarios with attacker goals
+  # paranoid: STRIDE + OWASP + DREAD scoring (1-10), prioritized mitigation plan
+
+memory:
+  backend: local  # local | engram (if using Alejandría persistent memory)
+
+# Exploration settings (optional - runs before propose to investigate codebase)
+explore:
+  mode: auto  # auto | always | never | prompt
+  # auto: triggers on security keywords (auth, payment, api, etc.)
+  # always: always explore before propose
+  # never: skip exploration
+  # prompt: ask user each time
+  
+  max_tokens: 50000  # budget for exploration (optional, default: 50000)
+  
+  # Override auto-detection (optional)
+  # force_explore: true  # always explore regardless of keywords
+  # skip_explore: true   # never explore regardless of keywords

@@ -1,0 +1,1007 @@
+# SpecIA vs Gentle-AI: Comparación Técnica
+
+**Última actualización**: 5 de abril de 2026  
+**Versión SpecIA**: 0.4.0  
+**Audiencia**: Equipo de AppSec, desarrolladores internos de Veritran
+
+---
+
+## Resumen Ejecutivo
+
+**SpecIA** es una herramienta de Spec-Driven Development (SDD) específica para equipos de AppSec, construida como un fork conceptual de **Gentle-AI** con mejoras profundas en seguridad.
+
+| Aspecto | Gentle-AI | SpecIA |
+|---------|-----------|---------|
+| **Tipo** | Instalador de ecosistema para agentes AI | MCP server standalone con workflow de seguridad |
+| **Audiencia** | Desarrolladores generales | Equipos de AppSec y seguridad |
+| **Workflow** | SDD genérico (opcional) | SDD con security review **OBLIGATORIO** |
+| **Deployment** | Instala configs en 8+ agentes AI | MCP server + CLI instalable en cualquier proyecto |
+| **Security Focus** | No incluye security review | STRIDE + OWASP + DREAD + Abuse Cases |
+| **Código Abierto** | Público (GitHub) | Privado (GitLab Veritran) |
+
+---
+
+## ¿Qué es Gentle-AI?
+
+Gentle-AI es un **instalador de ecosistema** que configura agentes AI (Claude Code, OpenCode, Cursor, etc.) con:
+
+- **Engram**: Memoria persistente vía MCP
+- **SDD workflow**: 9 fases (explore → propose → spec → design → tasks → apply → verify → archive)
+- **14+ skills curados**: Patrones de código, testing, workflows
+- **MCP servers**: Context7, Notion, Jira
+- **GGA**: AI provider switcher
+- **Soporte multi-agente**: 8 agentes diferentes (Claude Code, OpenCode, Cursor, Gemini CLI, VS Code Copilot, Codex, Windsurf, Antigravity)
+
+**Instalación**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/main/scripts/install.sh | bash
+```
+
+**Workflow SDD en Gentle-AI**:
+```
+propose → spec → [design] → tasks → apply → verify → archive
+          ↑
+       OPCIONAL — todo el workflow es opcional
+```
+
+---
+
+## ¿Qué es SpecIA?
+
+SpecIA es un **MCP server + CLI** que implementa SDD con un **security review obligatorio**. No es un instalador — es un producto standalone que cualquier agente AI puede usar vía MCP.
+
+**Instalación**:
+```bash
+# Clone desde GitLab (requiere acceso a Veritran GitLab)
+git clone https://gitlab.veritran.net/appsec/specia.git
+cd specia
+./install.sh --claude-code --opencode
+```
+
+**Workflow SDD en SpecIA**:
+```
+propose → spec → [design] → REVIEW (MANDATORY) → tasks → [audit] → done
+                               ↑                              ↑
+                          HARD GATE                     OPCIONAL
+                     (no se puede skipear)         (code audit post-impl)
+```
+
+---
+
+## Mejoras de SpecIA sobre Gentle-AI
+
+### 1. Security Review OBLIGATORIO (Hard Gate)
+
+**El cambio más importante**: En SpecIA, **no se puede generar tasks sin un security review válido**.
+
+| Gentle-AI | SpecIA |
+|-----------|---------|
+| Review no existe | **Review es MANDATORY** |
+| Puedes hacer `propose → spec → tasks → code` sin pensar en seguridad | Workflow se DETIENE en review. `specia_tasks` rechaza generar tasks sin review válido |
+| N/A | Review incluye STRIDE + OWASP + abuse cases |
+
+**Error si intentas skipear**:
+```json
+{
+  "error": "REVIEW_REQUIRED",
+  "message": "Security review must be completed before generating tasks",
+  "required_phase": "review",
+  "current_phase": "spec"
+}
+```
+
+**Validación de staleness**: Si modificas la spec DESPUÉS del review, el review se marca `STALE` y `specia_tasks` rechaza generar tasks hasta que re-reviewes.
+
+---
+
+### 2. Security Posture con Depth Control
+
+SpecIA tiene **3 niveles de profundidad** para el review, configurables por proyecto:
+
+| Posture | Análisis | Caso de Uso |
+|---------|----------|-------------|
+| `standard` | STRIDE light — top risks, risk levels, one-line mitigations | Herramientas internas, cambios de bajo riesgo |
+| `elevated` | STRIDE completo + OWASP Top 10 mapping + threat scenarios con attacker goals | Features customer-facing |
+| `paranoid` | STRIDE + OWASP + DREAD scoring (1-10) + mitigation plan priorizado | Payments, autenticación, manejo de PII |
+
+**Configuración**:
+```bash
+specia init
+# Pregunta 4: Security posture
+# > paranoid  (para proyectos críticos)
+```
+
+**Output del review (paranoid)**:
+```yaml
+findings:
+  - threat: "SQL Injection via unsanitized user input"
+    category: STRIDE/Tampering
+    owasp: A03:2021-Injection
+    dread:
+      damage: 9
+      reproducibility: 8
+      exploitability: 7
+      affected_users: 10
+      discoverability: 6
+      score: 8.0  # (D+R+E+A+D)/5
+    mitigation: "Use parameterized queries. Implement input validation with allowlist."
+    priority: CRITICAL
+```
+
+Gentle-AI **no tiene nada de esto** — el workflow SDD es genérico sin security analysis.
+
+---
+
+### 3. Abuse Cases (Attacker-Centric Analysis)
+
+SpecIA incluye **abuse cases** en el security review: escenarios desde la perspectiva del atacante.
+
+**Estructura de un abuse case**:
+```yaml
+abuse_case:
+  name: "Bypass rate limiting via distributed requests"
+  attacker_goal: "Exhaust API resources to cause DoS"
+  attack_vector: "Multiple IPs targeting same user session"
+  preconditions: "Rate limit enforced per IP only, not per user_id"
+  impact: "Service degradation for all users, potential downtime"
+  mitigation: "Implement compound rate limit: user_id + IP combined. Add CAPTCHA on threshold breach."
+  references_requirement: "REQ-3 (Rate Limiting)"
+```
+
+**Uso en el workflow**:
+1. Security review genera abuse cases
+2. Abuse cases alimentan la generación de tasks (`specia_tasks` crea mitigations)
+3. Code audit (`specia_audit`) verifica que el código implementado resuelve los abuse cases
+
+Gentle-AI **no tiene abuse cases** — no hay threat modeling attacker-centric.
+
+---
+
+### 4. Code Audit Post-Implementation (Opcional)
+
+SpecIA incluye un **audit phase** que verifica código implementado contra:
+- ✅ Requirements de la spec
+- ⚠️ Abuse cases del review
+
+**Comando**:
+```bash
+specia audit my-change
+# Phase 1: Imprime audit prompt con spec + abuse cases
+# [Agent ejecuta audit con LLM]
+# Phase 2: Submit audit result
+specia audit my-change --result '{"requirements":[...]}'
+```
+
+**MCP tool**: `specia_audit(change_name, files?, max_files?, max_tokens?)`
+
+**Output del audit**:
+```yaml
+audit_result:
+  requirements:
+    - req: "REQ-1: User authentication via JWT"
+      status: ✅ SATISFIED
+      evidence: "auth.ts lines 45-67: JWT validation implemented"
+    
+    - req: "REQ-3: Rate limiting per user"
+      status: ⚠️ PARTIAL
+      gap: "Rate limit per IP only. User_id not included in key."
+      files: ["middleware/rateLimit.ts:23"]
+    
+  abuse_cases:
+    - case: "Bypass rate limiting via distributed IPs"
+      status: ❌ UNADDRESSED
+      evidence: "No compound key (user_id + IP) in rateLimit.ts"
+      recommendation: "Refactor cache key to include user_id"
+
+  verdict: ⚠️ NEEDS_REVISION
+  risk_level: MEDIUM
+```
+
+Gentle-AI tiene `sdd-verify` (verifica código vs spec) pero **no incluye abuse cases** en la validación.
+
+---
+
+### 5. Guardian: Pre-Commit Spec Validation
+
+SpecIA incluye **Guardian**, un pre-commit hook que valida commits contra la spec.
+
+**Arquitectura Guardian**:
+```
+Commit → Layer 1-3 (permisos, secrets, tests) →
+         Layer 4a: Heuristics (AST parsing + OWASP patterns, <500ms) →
+         [Si flagged] → Layer 4b: LLM validation →
+         ✅ Accept / ⚠️ Warn / ❌ Reject
+```
+
+**Instalación**:
+```bash
+specia hook install --spec-aware
+```
+
+**Layer 4a - Heuristic Validation** (901 lines):
+- AST parsing (TypeScript, JavaScript, Python, Go, Rust)
+- OWASP pattern detection (SQL injection, XSS, path traversal, command injection, etc.)
+- Spec coverage analysis (archivos tocados vs scope de la spec)
+- Ejecuta en <500ms (sin LLM)
+
+**Layer 4b - LLM Validation** (551 lines):
+- Solo se ejecuta si Layer 4a detecta issues
+- Valida semánticamente código vs requirements de la spec
+- Soporta Anthropic y OpenAI
+- Dual cache system: spec cache + validation cache
+
+**Ejemplo de rechazo**:
+```bash
+git commit -m "Add payment processing"
+
+❌ Guardian Layer 4a: Spec compliance issues detected
+   - File: src/payment/processor.ts (ADDED)
+   - Issue: File not mentioned in spec scope
+   - Spec scope: src/auth/, src/middleware/
+   - Recommendation: Update spec to include payment processing
+
+❌ Guardian Layer 4b: Security pattern violation
+   - File: src/payment/processor.ts:45
+   - Pattern: Potential SQL injection (unsanitized user input)
+   - OWASP: A03:2021-Injection
+   - Recommendation: Use parameterized queries
+
+Commit REJECTED. Fix issues or update spec.
+```
+
+Gentle-AI **no tiene Guardian** — no hay validación de spec compliance en commits.
+
+---
+
+### 6. Design Phase Enrichment
+
+En SpecIA, el **design phase** es opcional pero cuando existe, **enriquece el review y los tasks**.
+
+**Flujo**:
+```
+spec → design → review
+       ↓         ↑
+       └─────────┘
+   Design alimenta review prompt
+```
+
+**Impacto**:
+- Security review ve el **technical approach** (no solo requirements)
+- Review puede detectar threats a nivel de arquitectura (no solo implementación)
+- Tasks generados incluyen **implementation guidance** del design
+
+**Ejemplo**:
+```yaml
+# design.md
+decisions:
+  - title: "Use Redis for distributed rate limiting"
+    rationale: "In-memory rate limit won't work across replicas"
+    alternatives_considered: "Postgres (too slow), local cache (no sync)"
+
+# review.md (generado CON design)
+findings:
+  - threat: "Redis connection hijacking"
+    category: STRIDE/Elevation of Privilege
+    context: "Decision to use Redis for rate limiting (design.md)"
+    mitigation: "Use TLS for Redis connection, rotate credentials"
+```
+
+Sin design, el review solo ve requirements — puede perder threats arquitectónicos.
+
+Gentle-AI tiene design phase pero **no alimenta el review** (Gentle-AI no tiene review).
+
+---
+
+### 7. Alejandría Integration (Memory Backend)
+
+SpecIA usa **Alejandría** (Rust MCP server) como backend de memoria, no Engram (TypeScript).
+
+| Feature | Engram (Gentle-AI) | Alejandría (SpecIA) |
+|---------|-------------------|---------------------|
+| Language | TypeScript/JavaScript | Rust |
+| Search | Simple keyword matching | BM25 full-text (FTS5) + hybrid embeddings |
+| Memory Model | Single-tier episodic | Dual-tier: Episodic + Semantic (memoirs/graphs) |
+| Temporal Decay | No | Sí — access-aware dampening por importancia |
+| Consolidation | No | Sí — merge related memories |
+| Knowledge Graphs | No | Sí — typed concept relations (IsA, Causes, etc.) |
+| Performance | Node.js overhead | Native binary (50-100x más rápido) |
+
+**Ejemplo de búsqueda**:
+```bash
+# Gentle-AI (Engram)
+mem_search("authentication JWT")
+# → Simple keyword match en topic/content
+
+# SpecIA (Alejandría)
+mem_search("authentication JWT")
+# → BM25 ranking + cosine similarity (embeddings)
+# → Retorna specs pasadas + security findings relevantes
+# → Incluye knowledge graph: "JWT" IsA "Token", PrerequisiteOf "HTTPS"
+```
+
+**Por qué Alejandría**:
+- Desarrollado internamente por Veritran (control total)
+- Performance crítico para búsquedas de specs en proyectos grandes
+- Knowledge graphs permiten navegar relaciones entre specs (ej: "find all specs that use Redis")
+
+---
+
+### 8. Task Generation con Security Mitigations
+
+En SpecIA, **cada finding del review genera tasks de mitigación**.
+
+**Flujo**:
+```
+review findings → specia_tasks → tasks.md
+                       ↓
+              include_mitigations: true (default)
+```
+
+**Ejemplo**:
+```yaml
+# review.md
+findings:
+  - id: FIND-001
+    threat: "Race condition in distributed counter"
+    severity: HIGH
+    mitigation: "Use atomic operations or distributed locks"
+
+# tasks.md (generado)
+implementation_tasks:
+  - task_1: "Implement rate limit middleware"
+  - task_2: "Add Redis client configuration"
+  - task_3: "Write integration tests for rate limiting"
+
+security_mitigation_tasks:
+  - task_8: "Implement atomic increment with Redis INCR"
+    source: "security_review"
+    refs_finding: "FIND-001"
+    priority: HIGH
+  
+  - task_9: "Add fallback mechanism if Redis unavailable"
+    source: "security_review"
+    refs_finding: "FIND-002"
+    priority: MEDIUM
+```
+
+Gentle-AI genera tasks desde la spec pero **no incluye mitigations** del review (porque no hay review).
+
+---
+
+### 9. Stale Review Detection
+
+SpecIA detecta cuando la spec cambia **después** del review y marca el review como `STALE`.
+
+**Protección contra bypass**:
+```bash
+specia spec my-change  # Escribe spec
+specia review my-change  # Review OK
+specia spec my-change --requirements '[...]'  # Modificas spec
+specia tasks my-change  # ❌ ERROR: REVIEW_STALE
+
+# Output:
+{
+  "error": "REVIEW_STALE",
+  "message": "Spec was modified after review. Re-run security review.",
+  "spec_modified_at": "2026-04-05T14:23:00Z",
+  "review_completed_at": "2026-04-05T13:15:00Z"
+}
+```
+
+**Fuerza re-review**:
+```bash
+specia review my-change --force  # Re-ejecuta review
+specia tasks my-change  # ✅ Ahora sí genera tasks
+```
+
+Gentle-AI **no detecta staleness** — puedes modificar specs sin consecuencias.
+
+---
+
+### 10. MCP-Native Implementation
+
+**Diferencia arquitectónica clave**:
+
+| Gentle-AI | SpecIA |
+|-----------|---------|
+| **Instalador** que modifica configs de agentes | **MCP server standalone** que no toca configs |
+| Inyecta 14 skills como `.md` files | Expone 15 tools vía JSON-RPC |
+| Skills ejecutados por el agente leyendo markdown | Tools ejecutados por server TypeScript |
+| Requiere reinstalar si cambia un skill | Hot-reload: actualiza server, agentes lo ven inmediatamente |
+
+**SpecIA como MCP server**:
+```json
+// Agent config (Claude Code, OpenCode, etc.)
+{
+  "mcpServers": {
+    "specia": {
+      "command": "specia-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+**15 MCP tools expuestos**:
+- `specia_init` — Initialize project
+- `specia_propose` / `specia_new` — Create proposal
+- `specia_spec` — Write requirements
+- `specia_design` — Architecture design (optional)
+- `specia_review` — Security review (MANDATORY)
+- `specia_tasks` — Generate tasks
+- `specia_audit` — Code audit (optional)
+- `specia_done` — Archive change
+- `specia_continue` — Next phase
+- `specia_ff` — Fast-forward
+- `specia_search` — Search past specs
+- `specia_hook_install` / `uninstall` / `status` — Guardian hook management
+
+**Ventaja**: SpecIA funciona con **cualquier cliente MCP** sin modificar sus configs (solo agregar el server).
+
+---
+
+### 11. Scoped for AppSec Company
+
+| Aspecto | Gentle-AI | SpecIA |
+|---------|-----------|---------|
+| **Audiencia** | Desarrolladores generales | Equipos de AppSec en Veritran |
+| **Open Source** | Público (GitHub) | Privado (GitLab Veritran) |
+| **Prompts** | Genéricos | Tuned para casos de uso de AppSec |
+| **OWASP Mappings** | No aplica | OWASP Top 10 2021 + API Security Top 10 2023 |
+| **Compliance** | No | Pensado para auditorías y compliance interno |
+
+**Ejemplo de prompt tuning**:
+```yaml
+# Gentle-AI (genérico)
+"Write specifications for this change"
+
+# SpecIA (AppSec-tuned)
+"Write specifications with security-relevant scenarios.
+ Include edge cases for:
+ - Authentication bypass attempts
+ - Input validation failures
+ - Concurrent access conflicts
+ - Data exposure risks
+ 
+ Map each scenario to OWASP categories where applicable."
+```
+
+---
+
+## Auto-Detection: ¿Cuándo se Activa el Workflow?
+
+Tanto Gentle-AI como SpecIA usan **Task Escalation** para sugerir el workflow SDD.
+
+### Lógica de Detección (idéntica en ambos)
+
+```
+1. Simple question (what does X do, how does Y work)
+   → Responde inline
+
+2. Small task (single file edit, quick fix, rename)
+   → Delega a sub-agent general (NO sugiere SDD)
+
+3. Substantial feature/refactor (multi-file, new functionality, architecture change)
+   → SUGIERE SDD workflow
+```
+
+**Señales que disparan la sugerencia**:
+- ✅ Multi-file change (affects >3 files)
+- ✅ Nueva funcionalidad (feature, not just bugfix)
+- ✅ Architecture change (refactor, new module, API change)
+- ✅ Security-sensitive (auth, payment, PII, access control)
+
+### SpecIA: Threshold MÁS BAJO para Security Keywords
+
+**Diferencia clave**: SpecIA tiene un threshold **más bajo** que Gentle-AI cuando detecta **security keywords**.
+
+**Security keywords que disparan SpecIA**:
+```
+auth, authentication, authorization, login, jwt, token,
+password, encrypt, decrypt, hash, crypto,
+payment, billing, charge, refund,
+pii, personal data, sensitive data,
+rate limit, ddos, security, vulnerability,
+sql, injection, xss, csrf, cors,
+access control, permission, rbac, acl
+```
+
+**Ejemplo**:
+```
+User: "Agrega validación de password en el login"
+
+Gentle-AI: [Pequeño cambio — NO sugiere SDD]
+           [Ejecuta directo]
+
+SpecIA:   [SECURITY KEYWORD: password, login]
+           [Sugiere workflow AUNQUE sea 1 solo archivo]
+           "This involves authentication (security-sensitive).
+            I recommend using SpecIA workflow with security review.
+            Want me to start with `/specia-new password-validation`?"
+```
+
+### Flujo Real
+
+**Escenario 1: Tarea pequeña (no security-sensitive)**
+```
+User: "Renombra getUserData a fetchUserProfile en auth.ts"
+
+Agent: [NO sugiere SpecIA]
+       [Delega a sub-agent general]
+       [Retorna: renamed across 1 file, 3 occurrences]
+```
+
+**Escenario 2: Feature sustancial**
+```
+User: "Agrega rate limiting a los endpoints de API"
+
+Agent: "This is a substantial change affecting multiple files
+        and requires security consideration (rate limiting is
+        security-sensitive).
+        
+        This is a good candidate for SpecIA's security review
+        workflow.
+        
+        Want me to start with `/specia-new add-rate-limiting`?"
+
+User: "Sí"
+
+Agent: [Lanza workflow automáticamente]
+       propose → spec → design → REVIEW → tasks → code
+```
+
+**Escenario 3: Usuario pide explícitamente**
+```
+User: "/specia-new add-oauth"
+
+Agent: [No necesita detectar — usuario ya pidió SpecIA]
+       [Lanza workflow inmediatamente]
+```
+
+### Configuración: Forzar SpecIA para TODOS los cambios
+
+Si configuras `security_posture: paranoid`, SpecIA trata **TODOS** los cambios como security-sensitive:
+
+```bash
+specia init
+# Pregunta 4: Security posture
+# > paranoid
+
+# Ahora TODOS los cambios pasan por review workflow
+# (el agente sugiere SpecIA para CUALQUIER cambio)
+```
+
+---
+
+## Cuándo Usar SpecIA vs Gentle-AI
+
+| Caso de Uso | Recomendación |
+|-------------|---------------|
+| **Features customer-facing con datos sensibles** | ✅ **SpecIA** — review obligatorio |
+| **Autenticación, autorización, payments** | ✅ **SpecIA** — abuse cases + DREAD scoring |
+| **Refactors internos sin cambios de seguridad** | ⚪ Gentle-AI OK (más rápido) |
+| **Proyectos greenfield de alta seguridad** | ✅ **SpecIA** con `paranoid` posture |
+| **Prototipado rápido** | ⚪ Gentle-AI (sin overhead de review) |
+| **Compliance / Auditorías** | ✅ **SpecIA** — trazabilidad de security review |
+| **Equipos externos / contractors** | ✅ **SpecIA** — fuerza security review |
+| **Equipos internos de confianza** | ⚪ Gentle-AI o SpecIA según el proyecto |
+
+---
+
+## Instalación de SpecIA
+
+### Prerrequisitos
+
+- Node.js 18+
+- npm 9+
+- Acceso a GitLab Veritran (privado)
+
+### Pasos
+
+```bash
+# 1. Clone desde GitLab
+git clone https://gitlab.veritran.net/appsec/specia.git
+cd specia
+
+# 2. Install dependencies
+npm install
+
+# 3. Build
+npm run build
+
+# 4. Link globally (hace disponibles specia y specia-mcp)
+npm link
+
+# 5. Install agent configs (opcional)
+./install.sh --claude-code --opencode
+
+# 6. Verify
+specia --version
+# Output: SpecIA CLI v0.4.0
+```
+
+### Configurar Agent
+
+Agrega SpecIA como MCP server en tu agente:
+
+**Claude Code** (`~/Library/Application Support/Claude/claude_desktop_config.json` en macOS):
+```json
+{
+  "mcpServers": {
+    "specia": {
+      "command": "specia-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+**OpenCode** (`~/.config/opencode/config.json`):
+```json
+{
+  "mcpServers": {
+    "specia": {
+      "command": "specia-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+### Inicializar Proyecto
+
+```bash
+# Desde tu proyecto
+cd ~/repos/my-project
+
+# Inicializa SpecIA (vía agent)
+# En tu agente AI:
+> "Initialize SpecIA for this project"
+
+# O vía CLI:
+specia init
+```
+
+**4 preguntas**:
+1. **Project description** — ¿Qué hace este proyecto?
+2. **Primary stack** — Auto-detectado (Node.js, Rust, Go, Python, etc.)
+3. **Conventions** — Estándares de código (opcional)
+4. **Security posture** — `standard` | `elevated` | `paranoid`
+
+Esto crea `.specia/` en el proyecto.
+
+---
+
+## Workflow Completo: Ejemplo End-to-End
+
+### Caso: Agregar Autenticación JWT
+
+**Paso 1: Propose**
+```
+User (en agent): "Create a new change called add-jwt-auth to implement JWT authentication"
+
+Agent: [Llama specia_propose]
+       Proposal created:
+       - Intent: Implement JWT-based authentication
+       - Scope: src/auth/, src/middleware/, src/config/
+       - Approach: Use jsonwebtoken library, RS256 signing
+       
+       Next: Write specifications
+```
+
+**Paso 2: Spec**
+```
+Agent: [Llama specia_spec]
+       Spec written:
+       - 6 requirements
+       - 18 scenarios (including edge cases)
+       - Coverage: token generation, validation, refresh, blacklist
+       
+       Next: Architecture design (optional) or security review
+```
+
+**Paso 3: Design (opcional)**
+```
+User: "Create design document"
+
+Agent: [Llama specia_design — phase 1: get template]
+       [Analiza codebase]
+       [Llama specia_design — phase 2: submit design]
+       
+       Design created:
+       - 5 architecture decisions
+       - Key: Use Redis for token blacklist (not in-memory)
+       - Interface: AuthService, TokenValidator, BlacklistCache
+       
+       Next: Security review
+```
+
+**Paso 4: Review (MANDATORY)**
+```
+Agent: [Llama specia_review — phase 1: get prompt]
+       [Lee spec + design]
+       [Ejecuta STRIDE + OWASP analysis]
+       [Identifica abuse cases]
+       [Llama specia_review — phase 2: submit result]
+       
+       Review completed:
+       - Risk level: MEDIUM
+       - Findings: 7 (0 Critical, 2 High, 4 Medium, 1 Low)
+       - Top finding: JWT secret exposure risk
+       - Abuse cases: 3 (token replay, brute force, privilege escalation)
+       
+       Next: Generate tasks
+```
+
+**Paso 5: Tasks**
+```
+Agent: [Llama specia_tasks]
+       
+       Tasks generated:
+       - 12 implementation tasks
+       - 5 security mitigation tasks (from review findings)
+       
+       Example task:
+       - Task 7: Store JWT secret in environment variable, not config file
+         Source: security_review (FIND-002)
+         Priority: HIGH
+       
+       Next: Implement (manual) then code audit
+```
+
+**Paso 6: Implementation (manual)**
+```
+Developer: [Implementa los 17 tasks]
+           [Commits code]
+           
+           git add .
+           git commit -m "feat: implement JWT authentication"
+           
+           # Guardian hook ejecuta
+           ✅ Layer 1-3: Pass
+           ✅ Layer 4a: Heuristics OK (no SQL injection, no hardcoded secrets)
+           ⚠️ Layer 4b: Spec coverage warning
+              - File: src/auth/jwtService.ts (ADDED)
+              - Note: Matches spec scope ✅
+           
+           Commit ACCEPTED
+```
+
+**Paso 7: Audit (opcional)**
+```
+User: "Run code audit for add-jwt-auth"
+
+Agent: [Llama specia_audit con files tocados]
+       
+       Audit result:
+       - 6/6 requirements SATISFIED ✅
+       - 2/3 abuse cases ADDRESSED ✅
+       - 1/3 abuse case PARTIAL ⚠️
+         - "Token replay attack" — blacklist implemented but TTL too long
+       
+       Verdict: ⚠️ NEEDS_MINOR_REVISION
+       Recommendation: Reduce blacklist TTL from 24h to 2h
+```
+
+**Paso 8: Done**
+```
+User: "Archive this change"
+
+Agent: [Llama specia_done]
+       
+       Change archived:
+       - Spec synced to .specia/specs/add-jwt-auth.md
+       - Review findings saved for future reference
+       - Change directory cleaned up
+```
+
+---
+
+## Arquitectura Interna: SpecIA
+
+```
+┌─────────────────────────────────────────────────┐
+│  Agent (Claude Code, OpenCode, etc.)            │
+│  - Detecta "substantial change"                 │
+│  - Sugiere SpecIA workflow                     │
+└─────────────────────┬───────────────────────────┘
+                      │ JSON-RPC 2.0
+                      ↓
+┌─────────────────────────────────────────────────┐
+│  SpecIA MCP Server (TypeScript)                │
+│  - 15 tools: specia_init, propose, spec, ...    │
+│  - State management (.specia/changes/)          │
+│  - Security review engine                       │
+└─────────────────────┬───────────────────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        ↓             ↓             ↓
+┌──────────────┐ ┌────────────┐ ┌──────────────┐
+│ Guardian     │ │ Alejandría │ │ LLM Provider │
+│ (pre-commit) │ │ (memory)   │ │ (Anthropic/  │
+│ - Layer 4a   │ │ - BM25     │ │  OpenAI)     │
+│ - Layer 4b   │ │ - Graphs   │ │              │
+└──────────────┘ └────────────┘ └──────────────┘
+```
+
+**Componentes**:
+- **MCP Server**: Core TypeScript, 15 tools, state tracking
+- **Guardian**: Pre-commit hook (4 layers: permisos, secrets, tests, spec compliance)
+- **Alejandría**: Memory backend (Rust, BM25 + embeddings)
+- **LLM Provider**: Anthropic (Claude) o OpenAI (GPT-4) para review/audit
+
+**Estado persistido**:
+```
+.specia/
+├── config.yaml          # Project config (stack, posture)
+├── context.md           # Project context
+├── changes/
+│   └── add-jwt-auth/
+│       ├── proposal.md
+│       ├── spec.md
+│       ├── design.md
+│       ├── review.md    # Security review findings
+│       ├── tasks.md
+│       └── state.yaml   # Workflow state
+└── specs/
+    └── add-jwt-auth.md  # Archived spec (after done)
+```
+
+---
+
+## Roadmap: Próximas Features
+
+### v0.5.0 (Q2 2026)
+- [ ] **Multi-language support** para Guardian Layer 4a (Java, C#, Ruby)
+- [ ] **CVSS scoring** en review findings (además de DREAD)
+- [ ] **CI/CD integration**: SpecIA check en GitLab CI pipelines
+- [ ] **Web UI** para explorar specs archivadas y findings
+
+### v0.6.0 (Q3 2026)
+- [ ] **Team collaboration**: Multi-reviewer approval para security review
+- [ ] **Threat library**: Reusable threat patterns por stack (Node.js, Go, etc.)
+- [ ] **Compliance templates**: GDPR, PCI-DSS, SOC2 checklists en review
+- [ ] **Metrics dashboard**: Track review coverage, finding trends
+
+### v1.0.0 (Q4 2026)
+- [ ] **SaaS offering**: SpecIA hosted service para equipos externos
+- [ ] **Plugin system**: Custom review rules y abuse case templates
+- [ ] **AI red team**: LLM-based automated attack simulation en audit phase
+
+---
+
+## FAQ
+
+### ¿SpecIA reemplaza a Gentle-AI?
+
+**No, son complementarios**. Gentle-AI configura tu ecosistema de agentes (memoria, skills, MCP servers). SpecIA es UNA herramienta dentro de ese ecosistema — específica para security-aware SDD.
+
+**Puedes usar ambos**:
+- Gentle-AI instala Engram, Context7, GGA, skills generales
+- SpecIA agrega security review workflow vía MCP
+
+### ¿Funciona SpecIA sin Gentle-AI?
+
+**Sí**. SpecIA es standalone — solo necesitas:
+1. Un agente AI con soporte MCP (Claude Code, OpenCode, etc.)
+2. Node.js 18+
+3. Agregar SpecIA como MCP server en tu agent config
+
+No requiere Engram ni ningún componente de Gentle-AI.
+
+### ¿Por qué no contribuir a Gentle-AI en vez de hacer un fork?
+
+**Razones**:
+1. **Scope diferente**: Gentle-AI es un instalador genérico. SpecIA es un producto de seguridad específico.
+2. **Privacidad**: SpecIA es privado (GitLab Veritran). Contiene lógica de AppSec interna.
+3. **Compliance**: SpecIA necesita control total del código para auditorías.
+4. **Roadmap**: Features como threat library, compliance templates no aplican a Gentle-AI.
+
+**Contribuimos a Gentle-AI** cuando detectamos bugs o mejoras generales. Pero SpecIA es un producto diferente.
+
+### ¿Qué agentes AI soporta SpecIA?
+
+**Cualquier agente con soporte MCP**:
+- ✅ Claude Code (Claude Desktop)
+- ✅ OpenCode
+- ✅ VS Code Copilot (con MCP extension)
+- ✅ Cursor (vía MCP)
+- ✅ Gemini CLI
+- ⚠️ Windsurf (soporte limitado — no tiene Task tool)
+- ⚠️ Codex (solo via CLI, no MCP)
+
+**Instalador incluye configs** para Claude Code y OpenCode. Otros agentes requieren configuración manual del MCP server.
+
+### ¿Cómo se compara el performance?
+
+| Operación | Gentle-AI (Engram) | SpecIA (Alejandría) |
+|-----------|-------------------|---------------------|
+| Search 1000 specs | ~500ms | ~50ms (10x más rápido) |
+| Store observation | ~20ms | ~2ms (10x más rápido) |
+| Hybrid search (embeddings) | N/A | ~100ms (BM25 + cosine) |
+| Memory footprint | ~150MB (Node.js) | ~30MB (Rust native) |
+
+**Por qué más rápido**: Alejandría es Rust nativo con SQLite optimizado (FTS5). Engram es TypeScript con overhead de Node.js.
+
+### ¿SpecIA funciona offline?
+
+**Parcialmente**:
+- ✅ CLI commands (propose, spec, design, tasks, done) — offline OK
+- ❌ Security review — requiere LLM (Anthropic o OpenAI API)
+- ❌ Code audit — requiere LLM
+- ⚠️ Guardian Layer 4a — offline OK (heuristics)
+- ❌ Guardian Layer 4b — requiere LLM
+
+**Modo offline**: Puedes hacer `specia propose/spec/design/tasks` offline. Review y audit deben esperar conexión.
+
+### ¿Cuánto cuesta el LLM usage?
+
+**Estimado por security review** (Claude Sonnet 3.5):
+- **standard posture**: ~5K tokens input + 1K output = **$0.03 USD**
+- **elevated posture**: ~10K tokens input + 2K output = **$0.06 USD**
+- **paranoid posture**: ~20K tokens input + 5K output = **$0.15 USD**
+
+**Code audit**: Similar al review (depende de cuántos archivos).
+
+**Guardian Layer 4b**: ~2K tokens por commit flagged = **$0.01 USD**
+
+**Costo mensual típico** (10 changes, elevated posture): **~$6 USD/mes**
+
+### ¿Se puede usar otro LLM provider?
+
+**Actualmente soportado**:
+- ✅ Anthropic (Claude Sonnet, Opus, Haiku)
+- ✅ OpenAI (GPT-4, GPT-4 Turbo)
+
+**Roadmap**:
+- [ ] Google Vertex AI (Gemini)
+- [ ] Azure OpenAI
+- [ ] Ollama (local LLMs)
+
+**Configuración** (via environment variables):
+```bash
+export SPECIA_PROVIDER=anthropic  # o openai
+export ANTHROPIC_API_KEY=sk-...
+```
+
+---
+
+## Contribuciones
+
+SpecIA es **privado** (GitLab Veritran). Contribuciones internas del equipo de AppSec.
+
+**Proceso**:
+1. Fork interno en GitLab
+2. Branch: `feature/nombre` o `fix/nombre`
+3. PR con descripción detallada
+4. Review por 2+ miembros del equipo
+5. Security review obligatorio para cambios en core/
+
+**Reportar bugs**: GitLab issues en `https://gitlab.veritran.net/appsec/specia/-/issues`
+
+---
+
+## Soporte
+
+- **Documentación**: Este documento + `docs/` en el repo
+- **Issues**: GitLab issues (privado)
+- **Slack**: Canal `#appsec-tools` en Veritran Slack
+- **Email**: appsec@veritran.com
+
+---
+
+## Referencias
+
+- **SpecIA GitLab**: https://gitlab.veritran.net/appsec/specia (privado)
+- **Gentle-AI GitHub**: https://github.com/Gentleman-Programming/gentle-ai
+- **Alejandría**: Repo interno Veritran (por publicar)
+- **MCP Protocol**: https://modelcontextprotocol.io
+- **STRIDE**: https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats
+- **OWASP Top 10 2021**: https://owasp.org/Top10/
+- **OWASP API Security Top 10 2023**: https://owasp.org/API-Security/
+
+---
+
+**Última actualización**: 5 de abril de 2026  
+**Versión del documento**: 1.0  
+**Mantenido por**: Equipo de AppSec, Veritran

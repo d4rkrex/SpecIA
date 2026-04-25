@@ -6,7 +6,7 @@ description: >
   Trigger: When orchestrator runs verify after multi-agent apply, or user says "specia-verify".
 license: MIT
 metadata:
-  author: mroldan
+  author: SpecIA Team
   version: "1.0"
 ---
 

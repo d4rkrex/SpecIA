@@ -388,7 +388,7 @@ Si preferís configurar manualmente:
 
 ```bash
 # 1. Clonar el repo
-git clone https://gitlab.veritran.net/appsec/specia.git
+git clone https://github.com/d4rkrex/SpecIA.git
 cd specia
 
 # 2. Instalar (auto-detecta clientes instalados)
@@ -639,7 +639,7 @@ Guardian usa smart caching (`.guardian-cache.json`). Si el archivo no cambió y 
 ## Contacto
 
 **Equipo AppSec** — Para preguntas, feedback o solicitudes de features:
-- Repo: `https://gitlab.veritran.net/appsec/specia`
+- Repo: `https://github.com/d4rkrex/SpecIA`
 - Slack: `#appsec`
 
 ---

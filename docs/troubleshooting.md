@@ -7,7 +7,7 @@
 ```
 Error: Configuration is invalid at ~/.config/opencode/opencode.json:
 bad file reference: "{file:~/.config/opencode/skills/specia-explore/SKILL.md}"
-/home/mroldan/.config/opencode/skills/specia-explore/SKILL.md does not exist
+~/.config/opencode/skills/specia-explore/SKILL.md does not exist
 ```
 
 ### Causa

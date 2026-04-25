@@ -6,7 +6,7 @@ description: >
   Trigger: When user says "specia-apply", "implement tasks", "write code for specia change".
 license: MIT
 metadata:
-  author: mroldan
+  author: SpecIA Team
   version: "2.0"
 ---
 

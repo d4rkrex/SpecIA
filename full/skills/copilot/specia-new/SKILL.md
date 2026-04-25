@@ -5,7 +5,7 @@ description: >
   Trigger: When user says "specia-new", "new specia change", "create change proposal".
 license: MIT
 metadata:
-  author: mroldan
+  author: SpecIA Team
   version: "2.0"
 ---
 

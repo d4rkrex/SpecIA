@@ -7,7 +7,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://gitlab.veritran.net/appsec/specia.git"
+    "url": "https://github.com/d4rkrex/SpecIA.git"
   },
   "keywords": [
     "mcp",

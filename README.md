@@ -39,7 +39,7 @@ SpecIA provides **two flavors** of security review and audit:
 ### SpecIA Lite (Recommended for most users)
 
 ```bash
-git clone https://gitlab.veritran.net/appsec/specia.git
+git clone https://github.com/d4rkrex/SpecIA.git
 cd specia/lite
 ./install-lite.sh
 ```
@@ -53,7 +53,7 @@ Installs 2 skills in your AI editor:
 ### SpecIA Full (For compliance workflows)
 
 ```bash
-git clone https://gitlab.veritran.net/appsec/specia.git
+git clone https://github.com/d4rkrex/SpecIA.git
 cd specia/full
 ./install.sh
 ```
@@ -285,8 +285,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Support
 
-- **Issues**: [GitLab Issues](https://gitlab.veritran.net/appsec/specia/-/issues)
-- **Discussions**: [GitLab Discussions](https://gitlab.veritran.net/appsec/specia/-/discussions)
+- **Issues**: [GitLab Issues](https://github.com/d4rkrex/SpecIA/-/issues)
+- **Discussions**: [GitLab Discussions](https://github.com/d4rkrex/SpecIA/-/discussions)
 
 ---
 

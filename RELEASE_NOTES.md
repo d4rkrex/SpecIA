@@ -138,7 +138,7 @@ No breaking changes. All v0.5.2 features continue to work.
 
 ### 📝 Full Changelog
 
-See: https://gitlab.veritran.net/appsec/specia/-/compare/v0.5.2...v0.6.0
+See: https://github.com/d4rkrex/SpecIA/-/compare/v0.5.2...v0.6.0
 
 ---
 
@@ -333,14 +333,14 @@ specia audit my-change --format json    # Instead of specia_audit MCP tool
 
 ### 📝 Full Changelog
 
-See: https://gitlab.veritran.net/appsec/specia/-/compare/v0.5.0...v0.5.2
+See: https://github.com/d4rkrex/SpecIA/-/compare/v0.5.0...v0.5.2
 
 ---
 
 ### 📞 Support
 
-- **Issues**: https://gitlab.veritran.net/appsec/specia/-/issues
-- **Docs**: https://gitlab.veritran.net/appsec/specia/-/blob/main/README.md
+- **Issues**: https://github.com/d4rkrex/SpecIA/-/issues
+- **Docs**: https://github.com/d4rkrex/SpecIA/-/blob/main/README.md
 - **Specs**: `.specia/specs/` directory (archived changes)
 
 ---

@@ -500,7 +500,7 @@ Optimization: Tune keywords
 **Docs**: 
   - `docs/comparison.md` — Lite vs Full detallado
   - `docs/v1-to-v2-migration.md` — Token optimizations
-**Issues**: `gitlab.veritran.net/appsec/specia/issues`
+**Issues**: `github.com/d4rkrex/SpecIA/issues`
 
 ---
 

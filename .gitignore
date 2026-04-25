@@ -35,3 +35,7 @@ Thumbs.db
 inspirations/
 full/bin/specia
 full/bin/specia-mcp
+
+# Local agent configuration
+.claude/
+.atl/

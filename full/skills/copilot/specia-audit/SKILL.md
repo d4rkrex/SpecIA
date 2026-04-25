@@ -6,7 +6,7 @@ description: >
   Trigger: When user says "specia-audit", "audit code", "verify implementation".
 license: MIT
 metadata:
-  author: mroldan
+  author: SpecIA Team
   version: "2.0"
 ---
 

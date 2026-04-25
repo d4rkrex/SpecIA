@@ -5,7 +5,7 @@ description: >
   Trigger: When user says "specia-init", "specia init", "initialize specia", or wants to set up SpecIA.
 license: MIT
 metadata:
-  author: mroldan
+  author: SpecIA Team
   version: "2.0"
 ---
 

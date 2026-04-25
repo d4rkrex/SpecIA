@@ -257,7 +257,7 @@ export class ReviewSarifFormatter implements Formatter<ReviewResult> {
             driver: {
               name: 'SpecIA Security Review',
               version: '0.6.0',
-              informationUri: 'https://gitlab.veritran.net/appsec/specia',
+              informationUri: 'https://github.com/d4rkrex/SpecIA',
               rules: this.extractRules(findings)
             }
           },

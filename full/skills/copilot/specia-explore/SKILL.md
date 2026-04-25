@@ -5,7 +5,7 @@ description: >
   Trigger: When user says "specia-explore", "explore before proposal", "investigate security gaps", or before starting a SpecIA change.
 license: MIT
 metadata:
-  author: mroldan
+  author: SpecIA Team
   version: "1.0"
 ---
 

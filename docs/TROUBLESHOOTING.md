@@ -13,7 +13,7 @@ The `node_modules/` directory is missing. Node.js cannot resolve runtime depende
 
 ```
 ERR_MODULE_NOT_FOUND: Cannot find package '@modelcontextprotocol/sdk'
-  imported from /home/mroldan/repos/AppSec/SpecIA/dist/index.js
+  imported from /path/to/SpecIA/dist/index.js
 ```
 
 This can happen after:
@@ -24,7 +24,7 @@ This can happen after:
 **Fix**
 
 ```bash
-cd /home/mroldan/repos/AppSec/SpecIA
+cd /path/to/SpecIA
 npm install
 ```
 
@@ -64,7 +64,7 @@ After confirming, **restart your AI client** (OpenCode / Claude Code) so it re-s
 
    Both should point to:
    ```
-   node /home/mroldan/repos/AppSec/SpecIA/bin/specia-mcp.js
+   node /path/to/SpecIA/bin/specia-mcp.js
    ```
 
 ---
@@ -96,7 +96,7 @@ nvm use 22
 Run all checks at once:
 
 ```bash
-cd /home/mroldan/repos/AppSec/SpecIA
+cd /path/to/SpecIA
 
 echo "=== Node version ==="
 node --version

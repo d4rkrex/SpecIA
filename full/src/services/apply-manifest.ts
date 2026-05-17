@@ -18,6 +18,7 @@ import type {
   ApplyManifest,
   ApplyPattern,
   TaskGroup,
+  FleetRecommendation,
 } from "../types/apply-manifest.js";
 import {
   MAX_PARALLEL_WORKERS,
@@ -33,6 +34,8 @@ export interface GenerateManifestInput {
   reviewContent: string;
   /** File-to-task mapping extracted from tasks (if available from spec/design). */
   fileHints?: Map<string, string[]>;
+  /** Security keywords from config (in addition to built-in list). SpecIA T-02. */
+  extraSecurityKeywords?: string[];
 }
 
 export interface GenerateManifestResult {
@@ -74,6 +77,13 @@ export function generateApplyManifest(
   // SpecIA E-01: Inject default forbidden paths into every group
   groups = injectForbiddenPaths(groups);
 
+  // Fleet recommendation (advisory only — SpecIA T-02)
+  const fleetRecommendation = computeFleetRecommendation(
+    groups,
+    input.changeName,
+    input.extraSecurityKeywords,
+  );
+
   const manifest: ApplyManifest = {
     schema_version: "1.0",
     change_name: input.changeName,
@@ -84,6 +94,7 @@ export function generateApplyManifest(
     review_hash: reviewHash,
     restricted_paths: [...RESTRICTED_PATH_PATTERNS],
     generated_at: new Date().toISOString(),
+    fleet_recommendation: fleetRecommendation,
   };
 
   const yaml = stringifyYaml(manifest, { lineWidth: 120 });
@@ -259,6 +270,119 @@ function injectForbiddenPaths(groups: TaskGroup[]): TaskGroup[] {
       ...new Set([...group.forbidden_paths, ...DEFAULT_FORBIDDEN_PATHS]),
     ],
   }));
+}
+
+// ── Fleet Recommendation ─────────────────────────────────────────────
+
+/**
+ * Built-in security keywords that lower fleet score.
+ * SpecIA T-02: Extensible via config (extraSecurityKeywords param).
+ */
+const BUILTIN_SECURITY_KEYWORDS =
+  /auth|payment|crypto|secret|key|oauth|token|password|credential|billing|encrypt|decrypt/i;
+
+/**
+ * Compute fleet recommendation based on task groups and change metadata.
+ *
+ * Scoring:
+ *   +40  groups.length >= 2 (multiple independent groups)
+ *   +20  every group has >= 2 tasks (substantive groups)
+ *   +20  total task count >= 6 (enough work to justify orchestration)
+ *   +20  no file appears in more than one group (clean ownership)
+ *   -50  any file matches RESTRICTED_PATH_PATTERNS (security-sensitive paths)
+ *   -30  changeName matches security keywords (elevated risk)
+ *
+ * Threshold: score >= 60 → "fleet"; otherwise → "sequential"
+ *
+ * SpecIA T-02: Score is advisory. Real enforcement = guardian + specia-verify.
+ * SpecIA T-04: Score accounts for group count to flag token exhaustion risk.
+ */
+export function computeFleetRecommendation(
+  groups: TaskGroup[],
+  changeName: string,
+  extraSecurityKeywords?: string[],
+): FleetRecommendation {
+  let score = 0;
+  const reasons: string[] = [];
+
+  // Base: single group → nothing to parallelize
+  if (groups.length <= 1) {
+    return {
+      mode: "sequential",
+      score: 0,
+      reasons: ["Single task group — nothing to parallelize"],
+    };
+  }
+
+  const totalTasks = groups.reduce((sum, g) => sum + g.tasks.length, 0);
+
+  // +40: multiple groups
+  score += 40;
+  reasons.push(`${groups.length} independent task groups`);
+
+  // +20: every group is substantive
+  const allSubstantive = groups.every(g => g.tasks.length >= 2);
+  if (allSubstantive) {
+    score += 20;
+    reasons.push("All groups have ≥ 2 tasks each");
+  } else {
+    reasons.push("Some groups have < 2 tasks (lightweight groups)");
+  }
+
+  // +20: total task count >= 6
+  if (totalTasks >= 6) {
+    score += 20;
+    reasons.push(`${totalTasks} total tasks justify orchestration overhead`);
+  } else {
+    reasons.push(`Only ${totalTasks} total tasks — low overhead benefit`);
+  }
+
+  // +20: no shared file ownership
+  const allFiles = groups.flatMap(g => g.files_owned);
+  const uniqueFiles = new Set(allFiles);
+  const hasOverlap = allFiles.length !== uniqueFiles.size;
+  if (!hasOverlap) {
+    score += 20;
+    reasons.push("Clean file ownership — no cross-group conflicts");
+  } else {
+    reasons.push("File ownership overlap detected — coupling risk");
+  }
+
+  // -50: any restricted path in ownership
+  const hasRestrictedPath = groups.some(g =>
+    g.files_owned.some(file =>
+      RESTRICTED_PATH_PATTERNS.some(pat => {
+        const normalized = pat.replace(/\*\*/g, "").replace(/\*/g, "");
+        return file.startsWith(normalized) || file.includes(normalized);
+      }),
+    ),
+  );
+  if (hasRestrictedPath) {
+    score -= 50;
+    reasons.push("⚠ Security-sensitive path in worker ownership (−50)");
+  }
+
+  // -30: security keyword in change name
+  const keywordsPattern = extraSecurityKeywords && extraSecurityKeywords.length > 0
+    ? new RegExp(
+        `${BUILTIN_SECURITY_KEYWORDS.source}|${extraSecurityKeywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}`,
+        "i",
+      )
+    : BUILTIN_SECURITY_KEYWORDS;
+
+  if (keywordsPattern.test(changeName)) {
+    score -= 30;
+    reasons.push(`⚠ Change name contains security keyword (−30): "${changeName}"`);
+  }
+
+  // Clamp to [0, 100]
+  score = Math.max(0, Math.min(100, score));
+
+  return {
+    mode: score >= 60 ? "fleet" : "sequential",
+    score,
+    reasons,
+  };
 }
 
 // ── Utilities ────────────────────────────────────────────────────────

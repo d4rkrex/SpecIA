@@ -53,8 +53,26 @@ export interface ApplyManifest {
   restricted_paths: string[];
   /** ISO 8601 timestamp of manifest generation. */
   generated_at: string;
+  /** Fleet recommendation — advisory, computed at manifest generation time. */
+  fleet_recommendation?: FleetRecommendation;
   /** Optional: Colmena role IDs for runtime permission enforcement (R-007). */
   colmena_roles?: Record<string, string>;
+}
+
+/**
+ * Fleet recommendation — computed from task groups + change metadata.
+ * Advisory only: the actual security enforcement is in specia-verify + guardian.
+ *
+ * SpecIA T-02: Score is advisory. Enforcement layers are independent.
+ * SpecIA T-04: Score considers group count to flag token exhaustion risk.
+ */
+export interface FleetRecommendation {
+  /** Recommended execution mode. */
+  mode: "fleet" | "sequential";
+  /** Score 0–100: higher = stronger fleet recommendation. Threshold: 60. */
+  score: number;
+  /** Human-readable reasons for this recommendation. */
+  reasons: string[];
 }
 
 // SpecIA D-01: Cap parallel workers to prevent token exhaustion

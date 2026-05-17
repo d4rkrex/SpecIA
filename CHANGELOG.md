@@ -9,9 +9,9 @@ All notable changes to SpecIA will be documented in this file.
 - **`FleetRecommendation`** — New type in `apply-manifest.yaml`: `{ mode, score, reasons }`. Score 0–100 determines whether fan-out apply is worth the overhead.
 - **`computeFleetRecommendation()`** — Scoring algorithm: +40 multi-group, +20 substantive groups (≥2 tasks each), +20 total tasks ≥6, +20 clean file ownership; −50 restricted paths in scope, −30 security keyword in change name. Threshold: score ≥ 60 → `fleet`.
 - **`specia fleet check <change>`** — New CLI command: shows fleet recommendation, score bar, and reasons. `--json` flag for structured output.
-- **`specia-fleet` Copilot skill + Claude Code agent** — Orchestrates parallel specia-apply workers with security constraints.
-- **Apply phase routing** — `CLAUDE.md.section` checks `fleet_recommendation.mode` before delegating to specia-fleet or specia-apply.
-- **`specia-verify` hardened** — tasks_hash integrity check added as check #0. Aborts with `MANIFEST_TAMPERED` on hash mismatch.
+- **`specia-fleet` Copilot skill + Claude Code agent** — Orchestrates parallel vt-apply workers with security constraints.
+- **Apply phase routing** — `CLAUDE.md.section` checks `fleet_recommendation.mode` before delegating to specia-fleet or vt-apply.
+- **`vt-verify` hardened** — tasks_hash integrity check added as check #0. Aborts with `MANIFEST_TAMPERED` on hash mismatch.
 
 ### 🔄 Update Mechanism
 
@@ -50,15 +50,16 @@ All notable changes to SpecIA will be documented in this file.
 
 ### 🤖 Skills + Agents Coverage
 
-- **Copilot skills**: specia-scan, specia-debate, specia-doctor, specia-report, specia-update (all new)
-- **Claude Code agents**: specia-scan.md, specia-debate.md, specia-doctor.md, specia-report.md (all new)
+- **Copilot skills**: vt-scan, vt-debate, vt-doctor, vt-report, vt-update (all new)
+- **Claude Code agents**: vt-scan.md, vt-debate.md, vt-doctor.md, vt-report.md (all new)
 - **CLAUDE.md orchestrator**: "Ad-hoc Security Commands" routing table — scan/debate/doctor/report now routed to sub-agents automatically
 - **All new commands in `specia --list`** — Scan, debate, doctor, report, fleet, update, changelog, skills now appear in the command list
+- **`specia-review-lite` + `specia-audit-lite`** — Lightweight skills (no Node required) consolidated into `full/skills/copilot/`; installed automatically by `./install.sh --copilot`
 
 ### 🔧 CI/CD Templates
 
-- **`ci-templates/github-actions/specia-pr-scan.yml`** — GitHub Actions workflow: scans every PR, posts comment with severity breakdown (🔴🟡🟢), optional `VT_SPEC_FAIL_ON_HIGH` gate, 30-day artifact retention.
-- **`ci-templates/gitlab-ci/specia-scan.yml`** — GitLab CI equivalent.
+- **`ci-templates/github-actions/vt-spec-pr-scan.yml`** — GitHub Actions workflow: scans every PR, posts comment with severity breakdown (🔴🟡🟢), optional `VT_SPEC_FAIL_ON_HIGH` gate, 30-day artifact retention.
+- **`ci-templates/gitlab-ci/vt-spec-scan.yml`** — GitLab CI equivalent.
 - **Zero setup** — Copy the template, commit, and every PR gets automatic security scanning.
 
 ---
@@ -127,7 +128,7 @@ All notable changes to SpecIA will be documented in this file.
 - **`apply-manifest.yaml`** — Generated after `specia tasks`. Defines `pattern` (sequential/fan-out), task groups with exclusive `files_owned`, `tasks_hash` integrity, `review_hash`.
 - **`MAX_PARALLEL_WORKERS = 5`** — Cap on parallel apply workers.
 - **`RESTRICTED_PATH_PATTERNS`** — Sensitive paths excluded from worker ownership.
-- **`specia-verify` skill** — Post-fan-out verification gate: Threat ID coverage, task completion, scope compliance, artifact integrity, git diff validation.
+- **`vt-verify` skill** — Post-fan-out verification gate: Threat ID coverage, task completion, scope compliance, artifact integrity, git diff validation.
 
 ### ✨ Design Phase
 
@@ -148,18 +149,18 @@ All notable changes to SpecIA will be documented in this file.
 
 - **Monorepo Restructure** — SpecIA is now a monorepo with two editions:
   - **SpecIA Full** (`full/`) — Complete workflow with MCP server, CLI, 7 workflow phases, dynamic testing, abuse case verification, and compliance-grade audit trails. For release gates, compliance requirements, and high-security features.
-  - **SpecIA Lite** (`lite/`) — Lightweight alternative with 2 OpenCode skills (`vt-review-lite`, `vt-audit-lite`), no MCP server, optimized for speed and cost. For PR reviews, quick checks, and early development.
+  - **SpecIA Lite** (`lite/`) — Lightweight alternative with 2 OpenCode skills (`specia-review-lite`, `specia-audit-lite`), no MCP server, optimized for speed and cost. For PR reviews, quick checks, and early development.
 - **Hybrid Setup Support** — Both editions can coexist in the same environment. Use Lite for 80% of features, Full for 20% critical paths → **73% cost savings** vs Full-only.
 
 ### ✨ SpecIA Lite Features (NEW)
 
-- **`vt-review-lite` skill** — Quick STRIDE security review focusing on critical/high threats only
+- **`specia-review-lite` skill** — Quick STRIDE security review focusing on critical/high threats only
   - Token budget: ~3.5k total (~$0.009 per review)
   - Time: ~15 seconds (5x faster than Full)
   - Output: Max 10 threats, max 500 tokens
   - Watermark: `🚀 SpecIA LITE Review | ~15s | ~$0.009 | Critical/High Only`
   - NO abuse cases, NO DREAD scoring, NO audit trail
-- **`vt-audit-lite` skill** — Quick static audit verifying spec compliance and security gaps
+- **`specia-audit-lite` skill** — Quick static audit verifying spec compliance and security gaps
   - Token budget: ~5.8k total (~$0.020 per audit)
   - Time: ~30 seconds
   - Checks: Test file existence (grep), security gap fixes (grep), spec requirement coverage (basic)

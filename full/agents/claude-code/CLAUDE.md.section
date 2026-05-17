@@ -1,4 +1,4 @@
-<!-- BEGIN:specia -->
+<!-- BEGIN:specia-spec -->
 ## SpecIA AppSec Orchestrator
 
 You have access to SpecIA, a security-aware spec-driven development CLI tool. When the user asks to plan, spec, or review a change, use SpecIA.
@@ -17,10 +17,10 @@ init -> [explore] -> propose -> spec -> [design] -> REVIEW (mandatory) -> tasks 
 
 | Phase | Sub-Agent | How it works |
 |-------|-----------|--------------|
-| Init | specia-init (inline OK) | Runs `specia init` CLI, creates `.specia/` |
+| Init | vt-init (inline OK) | Runs `specia init` CLI, creates `.specia/` |
 | Explore | specia-explore | Direct investigation, saves to Alejandría |
 | Propose | specia-propose | Creates `.specia/changes/{name}/` artifacts directly |
-| Spec | specia | Writes `.specia/changes/{name}/spec.md` directly |
+| Spec | specia-spec | Writes `.specia/changes/{name}/spec.md` directly |
 | Design | specia-design | Writes `.specia/changes/{name}/design.md` directly |
 | Review | specia-review | Writes `.specia/changes/{name}/review.md` directly |
 | Tasks | specia-tasks | Writes `.specia/changes/{name}/tasks.md` directly |
@@ -70,7 +70,7 @@ For each phase, launch a Task sub-agent with these instructions:
 
 **Propose**: "Read `~/.claude/skills/specia/specia-propose.md` for instructions. Create proposal for change '{name}'. Intent: {intent}. Scope: {scope}. Write all artifacts directly to `.specia/changes/{name}/` (proposal.md, state.yaml). Pass `skip_audit: true` in the proposal frontmatter to opt-out of mandatory audit. Return: status, summary, next_recommended."
 
-**Spec**: "Read `~/.claude/skills/specia/specia.md` for instructions. Write specs for change '{name}'. Previous: {proposal_summary}. Write spec.md directly to `.specia/changes/{name}/spec.md`. Return: status, summary (req count + scenario count), next_recommended."
+**Spec**: "Read `~/.claude/skills/specia/specia-spec.md` for instructions. Write specs for change '{name}'. Previous: {proposal_summary}. Write spec.md directly to `.specia/changes/{name}/spec.md`. Return: status, summary (req count + scenario count), next_recommended."
 
 **Design** (optional): "Read `~/.claude/skills/specia/specia-design.md` for instructions. Create design for change '{name}'. Write design.md directly to `.specia/changes/{name}/design.md`. Return: status, summary, next_recommended."
 
@@ -89,6 +89,20 @@ For each phase, launch a Task sub-agent with these instructions:
 - `specia continue {name}` — Run CLI to see next phase for a change
 - `specia ff {name}` — Run CLI for fast-forward (or delegate to sub-agent)
 - `specia search {query}` — Run CLI to search past specs
+
+### Ad-hoc Security Commands (no specia init needed)
+
+These commands work on any git repo, with or without a `.specia/` project:
+
+| User says | Delegate to | How |
+|-----------|-------------|-----|
+| "scan last PR/merge" | specia-scan | "Read `~/.claude/agents/specia-scan.md`. Scan the last merged PR. Run `specia scan --last-merge`, process prompt if needed, submit result." |
+| "quick security check" | specia-scan | "Read `~/.claude/agents/specia-scan.md`. Run `specia scan` on staged/diff changes." |
+| "debate findings" | specia-debate | "Read `~/.claude/agents/specia-debate.md`. Debate findings from last merge with `specia debate --last-merge`." |
+| "debate [change]" | specia-debate | "Read `~/.claude/agents/specia-debate.md`. Debate findings for change '{name}' with `specia debate {name}`." |
+| "security report" | specia-report | "Read `~/.claude/agents/specia-report.md`. Run `specia report`, interpret posture, recommend actions." |
+| "specia not working" | specia-doctor | "Read `~/.claude/agents/specia-doctor.md`. Run `specia doctor`, diagnose and fix issues." |
+| "update specia" | (inline) | Run `specia update` and summarize what's new. |
 
 ### Recovery
 
@@ -110,4 +124,4 @@ After compaction or new session: read `.specia/changes/{name}/state.yaml` to rec
 2. Includes STRIDE, OWASP Top 10, and abuse cases
 3. Posture (standard/elevated/paranoid) controls depth
 4. Stale reviews block task generation
-<!-- END:specia -->
+<!-- END:specia-spec -->

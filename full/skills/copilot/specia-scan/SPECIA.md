@@ -23,19 +23,24 @@ No spec, no change state required. Ideal for:
 
 ## Two-Phase Protocol
 
-### Phase 1: Generate Scan Prompt
+**Auto mode** (default): if `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is set, specia scan calls the LLM directly and shows results immediately.
+
+**Manual mode** (`--manual` flag): generates a prompt for external processing.
+
+### Phase 1: Run the Scan
 
 ```bash
 specia scan                                          # scan staged files
+specia scan --last-merge                             # scan last merged PR/MR
 specia scan --diff HEAD~1                            # scan last commit
 specia scan --diff main                              # diff vs branch
 specia scan --files src/auth.ts,src/api.ts           # specific files
 specia scan --posture elevated                        # deeper analysis
 ```
 
-The command collects code and prints a security analysis prompt. Process it with an LLM.
+If auto mode succeeds, findings are shown immediately — skip Phase 2.
 
-### Phase 2: Submit Result
+### Phase 2: Submit Result (manual mode only)
 
 ```bash
 specia scan --result @result.json

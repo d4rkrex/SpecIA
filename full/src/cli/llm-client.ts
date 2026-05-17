@@ -51,12 +51,27 @@ export interface LlmResult {
 export interface LlmClient {
   review(prompt: ReviewPrompt): Promise<LlmResult>;
   audit(prompt: AuditPrompt): Promise<LlmResult>;
+  /** Generic free-text completion — used by scan, debate, and other ad-hoc commands. */
+  complete(system: string, user: string): Promise<LlmResult>;
 }
 
 export interface LlmClientConfig {
   provider: "anthropic" | "openai";
   apiKey: string;
   model?: string;
+}
+
+/**
+ * Auto-detects available LLM credentials from environment variables.
+ * Priority: ANTHROPIC_API_KEY > OPENAI_API_KEY
+ * Returns null if no API key is found (manual/agent mode).
+ */
+export function autoDetectLlm(modelOverride?: string): LlmClient | null {
+  const anthropicKey = process.env["ANTHROPIC_API_KEY"];
+  if (anthropicKey) return createLlmClient({ provider: "anthropic", apiKey: anthropicKey, model: modelOverride });
+  const openaiKey = process.env["OPENAI_API_KEY"];
+  if (openaiKey) return createLlmClient({ provider: "openai", apiKey: openaiKey, model: modelOverride });
+  return null;
 }
 
 // ── Factory ──────────────────────────────────────────────────────────
@@ -90,8 +105,38 @@ class AnthropicClient implements LlmClient {
     return this.sendPrompt(prompt);
   }
 
+  async complete(system: string, user: string): Promise<LlmResult> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mod: any;
+    try {
+      mod = await import("@anthropic-ai/sdk" as string);
+    } catch {
+      throw new Error("Anthropic SDK not installed. Run: npm install @anthropic-ai/sdk");
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    const client = new mod.default({ apiKey: this.apiKey });
+    const modelId = this.model ?? "claude-sonnet-4-20250514";
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    const response = await client.messages.create({
+      model: modelId, max_tokens: 8192, system,
+      messages: [{ role: "user", content: user }],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const rawUsage = response.usage as { input_tokens?: number; output_tokens?: number } | undefined;
+    const usage: LLMUsage | undefined = rawUsage ? {
+      input_tokens: rawUsage.input_tokens ?? 0,
+      output_tokens: rawUsage.output_tokens ?? 0,
+      total_tokens: (rawUsage.input_tokens ?? 0) + (rawUsage.output_tokens ?? 0),
+    } : undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const actualModel = (response.model as string) ?? modelId;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const textBlock = response.content.find((b: { type: string }) => b.type === "text");
+    const text = (textBlock as { type: "text"; text: string } | undefined)?.text ?? "";
+    return { result: extractJson(text), usage, model: actualModel };
+  }
+
   private async sendPrompt(prompt: LlmPrompt): Promise<LlmResult> {
-    // Dynamic import — @anthropic-ai/sdk is an optional dependency
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mod: any;
     try {
@@ -173,8 +218,38 @@ class OpenAiClient implements LlmClient {
     return this.sendPrompt(prompt);
   }
 
+  async complete(system: string, user: string): Promise<LlmResult> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mod: any;
+    try {
+      mod = await import("openai" as string);
+    } catch {
+      throw new Error("OpenAI SDK not installed. Run: npm install openai");
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    const client = new mod.default({ apiKey: this.apiKey });
+    const modelId = this.model ?? "gpt-4o";
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    const response = await client.chat.completions.create({
+      model: modelId, max_tokens: 8192,
+      messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      response_format: { type: "json_object" },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const rawUsage = response.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+    const usage: LLMUsage | undefined = rawUsage ? {
+      input_tokens: rawUsage.prompt_tokens ?? 0,
+      output_tokens: rawUsage.completion_tokens ?? 0,
+      total_tokens: rawUsage.total_tokens ?? ((rawUsage.prompt_tokens ?? 0) + (rawUsage.completion_tokens ?? 0)),
+    } : undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const actualModel = (response.model as string) ?? modelId;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const text = (response.choices[0]?.message.content as string) ?? "";
+    return { result: extractJson(text), usage, model: actualModel };
+  }
+
   private async sendPrompt(prompt: LlmPrompt): Promise<LlmResult> {
-    // Dynamic import — openai is an optional dependency
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mod: any;
     try {

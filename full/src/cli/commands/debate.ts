@@ -1,12 +1,13 @@
 /**
  * CLI `specia debate <change-name>` — One-shot security finding debate.
  *
- * Generates a prompt that simulates a three-perspective debate (offensive
- * challenger, defensive validator, judge) on findings from review.md.
- * No direct LLM calls — uses the manual/result two-phase pattern.
+ * Dual mode:
+ * - Auto (default): calls LLM directly if ANTHROPIC_API_KEY or OPENAI_API_KEY is set
+ * - Manual (--manual): prints prompt for external LLM processing
+ * - Result (--result): submits debate result JSON
  *
- * Phase 1: specia debate <change>             → generate prompt, print it
- * Phase 2: specia debate <change> --result @debate.json → write debate.md
+ * Phase 1: specia debate <change>             → auto-call LLM or print prompt
+ * Phase 2: specia debate <change> --result @debate.json → write debate.md (manual only)
  */
 
 import { Command } from "commander";
@@ -14,6 +15,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
+import { autoDetectLlm } from "../llm-client.js";
 import {
   success,
   error,
@@ -21,6 +23,7 @@ import {
   dim,
   jsonOutput,
   isJsonMode,
+  withSpinner,
   resolveJsonInput,
   tryStdinJson,
 } from "../output.js";
@@ -276,12 +279,16 @@ export function registerDebateCommand(program: Command): void {
     .description("Structured security debate — validates findings or scans+debates a merge/diff")
     .option("--last-merge", "Scan the last merged PR/MR and debate findings (no specia init needed)")
     .option("--diff <ref>", "Scan a git diff and debate findings (e.g. HEAD~1, main..HEAD)")
-    .option("--manual", "Print debate prompt to stdout (default behavior)")
+    .option("--manual", "Print debate prompt to stdout (skip LLM even if API key is set)")
+    .option("--api", "Call LLM API directly (auto-detects ANTHROPIC_API_KEY / OPENAI_API_KEY)")
+    .option("--model <model>", "LLM model override (e.g. claude-opus-4, gpt-4o)")
     .option("--result <json>", "Submit debate result: inline JSON, @file.json, or - for stdin")
     .action(async (changeName: string | undefined, opts: {
       lastMerge?: boolean;
       diff?: string;
       manual?: boolean;
+      api?: boolean;
+      model?: string;
       result?: string;
     }) => {
       const speciaRoot = resolveVtspecRoot();
@@ -336,6 +343,26 @@ export function registerDebateCommand(program: Command): void {
         // Phase 1: generate prompt
         const prompt = buildScanAndDebatePrompt(code, description);
 
+        // Auto-detect LLM (skip if --manual)
+        const llmClient = opts.manual ? null : autoDetectLlm(opts.model);
+        if (llmClient) {
+          if (!isJsonMode()) info("Calling LLM for scan + debate…");
+          try {
+            const llmResult = await (isJsonMode()
+              ? llmClient.complete("You are a senior application security engineer and debate facilitator.", prompt)
+              : withSpinner("Analyzing with LLM…", () =>
+                  llmClient.complete("You are a senior application security engineer and debate facilitator.", prompt)
+                )
+            );
+            const ts2 = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+            return submitStandaloneDebateResult(llmResult.result, `${ts2}-debate`, description, speciaRoot);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            error(`LLM call failed: ${msg}`);
+            dim("  Falling back to manual mode:");
+          }
+        }
+
         if (isJsonMode()) {
           jsonOutput({ status: "prompt_generated", mode: "scan-and-debate", source: description, debate_prompt: prompt });
         } else {
@@ -385,6 +412,25 @@ export function registerDebateCommand(program: Command): void {
 
       // Phase 1: generate prompt
       const prompt = buildDebatePrompt(changeName, reviewContent);
+
+      // Auto-detect LLM (skip if --manual)
+      const llmClientB = opts.manual ? null : autoDetectLlm(opts.model);
+      if (llmClientB) {
+        if (!isJsonMode()) info(`Calling LLM to debate findings for "${changeName}"…`);
+        try {
+          const llmResult = await (isJsonMode()
+            ? llmClientB.complete("You are a senior application security engineer and debate facilitator.", prompt)
+            : withSpinner("Debating findings with LLM…", () =>
+                llmClientB.complete("You are a senior application security engineer and debate facilitator.", prompt)
+              )
+          );
+          return submitDebateResult(llmResult.result, changeName, speciaRoot);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          error(`LLM call failed: ${msg}`);
+          dim("  Falling back to manual mode:");
+        }
+      }
 
       if (isJsonMode()) {
         jsonOutput({ status: "prompt_generated", change_name: changeName, debate_prompt: prompt,

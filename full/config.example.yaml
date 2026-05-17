@@ -44,3 +44,20 @@ explore:
   # Override auto-detection (optional)
   # force_explore: true  # always explore regardless of keywords
   # skip_explore: true   # never explore regardless of keywords
+
+# Standalone LLM integration (optional — only needed for terminal use WITHOUT a coding agent)
+#
+# When running specia inside Copilot CLI or Claude Code, the agent itself IS the LLM.
+# No API key needed — the agent reads prompts and processes them directly.
+#
+# When running from a plain terminal (no coding agent), set one of these env vars:
+#   ANTHROPIC_API_KEY=sk-ant-...    → uses claude-sonnet-4 by default
+#   OPENAI_API_KEY=sk-...           → uses gpt-4o by default
+#
+# Or configure here for per-command model overrides:
+# cli:
+#   llm:
+#     provider: anthropic           # anthropic | openai
+#     api_key_env: ANTHROPIC_API_KEY
+#     model: claude-opus-4          # override default model for scan/debate/review
+

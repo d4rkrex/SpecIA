@@ -12,6 +12,7 @@ import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { tmpdir } from "node:os";
+import { autoDetectLlm } from "../llm-client.js";
 import {
   success,
   error,
@@ -20,6 +21,7 @@ import {
   dim,
   jsonOutput,
   isJsonMode,
+  withSpinner,
   resolveJsonInput,
   tryStdinJson,
   table,
@@ -236,7 +238,9 @@ export function registerScanCommand(program: Command): void {
     .option("--diff <ref>", "Scan diff vs a git ref (e.g. HEAD~1, main, origin/main)")
     .option("--files <paths>", "Comma-separated list of files to scan")
     .option("--posture <posture>", "Security posture: standard|elevated|paranoid", "standard")
-    .option("--manual", "Print prompt to stdout for manual LLM use (default behavior)")
+    .option("--manual", "Print prompt to stdout (skip LLM even if API key is set)")
+    .option("--api", "Call LLM API directly (auto-detects ANTHROPIC_API_KEY / OPENAI_API_KEY)")
+    .option("--model <model>", "LLM model override (e.g. claude-opus-4, gpt-4o)")
     .option("--result <json>", "Submit result: inline JSON, @file.json, or - for stdin")
     .option("--json", "JSON output throughout")
     .action(async (opts: {
@@ -245,6 +249,8 @@ export function registerScanCommand(program: Command): void {
       files?: string;
       posture?: string;
       manual?: boolean;
+      api?: boolean;
+      model?: string;
       result?: string;
       json?: boolean;
     }) => {
@@ -308,6 +314,35 @@ export function registerScanCommand(program: Command): void {
 
       // Generate prompt
       const prompt = buildScanPrompt(code, posture);
+
+      // Auto-detect LLM: use it if --api flag OR if API key available and not --manual
+      const llmClient = opts.manual ? null : autoDetectLlm(opts.model);
+      if (llmClient || opts.api) {
+        const client = llmClient ?? autoDetectLlm(opts.model);
+        if (!client) {
+          error("--api flag set but no API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
+          process.exitCode = 1;
+          return;
+        }
+        if (!isJsonMode()) info("Calling LLM for security scan…");
+        try {
+          const llmResult = await (isJsonMode()
+            ? client.complete("You are a senior application security engineer.", prompt)
+            : withSpinner("Analyzing with LLM…", () =>
+                client.complete("You are a senior application security engineer.", prompt)
+              )
+          );
+          return submitScanResult(llmResult.result, scanId, posture, source, speciaRoot);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          error(`LLM call failed: ${msg}`);
+          dim("  Falling back to manual mode. Process the prompt below with an LLM:");
+          dim(`  specia scan --result '<json>'`);
+          console.log("");
+          console.log(prompt);
+          return;
+        }
+      }
 
       // Save stub (to .specia/scans/ if available, else /tmp)
       const fallbackDir = path.join(tmpdir(), "specia-scans");

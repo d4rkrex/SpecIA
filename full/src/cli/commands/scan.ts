@@ -317,8 +317,9 @@ export function registerScanCommand(program: Command): void {
 
       // Auto-detect LLM: use it if --api flag OR if API key available and not --manual
       const llmClient = opts.manual ? null : autoDetectLlm(opts.model);
-      if (llmClient || opts.api) {
-        const client = llmClient ?? autoDetectLlm(opts.model);
+      const useApi = llmClient !== null || opts.api;
+      if (useApi) {
+        const client = llmClient ?? (opts.api ? autoDetectLlm(opts.model) : null);
         if (!client) {
           error("--api flag set but no API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
           process.exitCode = 1;

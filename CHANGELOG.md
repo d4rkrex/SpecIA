@@ -8,18 +8,58 @@ All notable changes to SpecIA will be documented in this file.
 
 - **`FleetRecommendation`** — New type in `apply-manifest.yaml`: `{ mode, score, reasons }`. Score 0–100 determines whether fan-out apply is worth the overhead.
 - **`computeFleetRecommendation()`** — Scoring algorithm: +40 multi-group, +20 substantive groups (≥2 tasks each), +20 total tasks ≥6, +20 clean file ownership; −50 restricted paths in scope, −30 security keyword in change name. Threshold: score ≥ 60 → `fleet`.
-- **`specia fleet check <change>`** — New CLI command: shows fleet recommendation, score bar, and reasons. `--json` flag for structured output. Informational only (exit 0 always).
-- **`specia-fleet` Copilot skill** — Orchestrates parallel specia-apply workers. Enforces: manifest integrity check (T-01), worker read/write scope (T-05), mandatory specia-verify gate after all workers (T-03), token budget warning (T-04).
-- **`specia-fleet.md` Claude Code agent** — Parallel apply via Task tool. Same security constraints as Copilot skill.
-- **Apply phase routing** — `CLAUDE.md.section` now checks `fleet_recommendation.mode` before delegating: `fan-out + fleet` → specia-fleet, otherwise → specia-apply.
-- **`specia-verify` hardened** — tasks_hash integrity check added as check #0 (before all other checks). Aborts with `MANIFEST_TAMPERED` error if hash mismatch detected.
+- **`specia fleet check <change>`** — New CLI command: shows fleet recommendation, score bar, and reasons. `--json` flag for structured output.
+- **`specia-fleet` Copilot skill + Claude Code agent** — Orchestrates parallel specia-apply workers with security constraints.
+- **Apply phase routing** — `CLAUDE.md.section` checks `fleet_recommendation.mode` before delegating to specia-fleet or specia-apply.
+- **`specia-verify` hardened** — tasks_hash integrity check added as check #0. Aborts with `MANIFEST_TAMPERED` on hash mismatch.
 
-### 🔄 Update Mechanism (NEW)
+### 🔄 Update Mechanism
 
-- **`./install.sh --update`** — Git pull + rebuild + reinstall all previously configured clients. Shows version diff and "What's New" from CHANGELOG.
-- **`specia update`** — Run from any directory. Reads `~/.specia/install-meta.json` to find the repo, then runs `git pull` + `./install.sh --update`.
-- **Install meta** — `~/.specia/install-meta.json` stores: repo path, installed version, timestamp, configured clients. Written/updated on every install.
+- **`specia update`** — Run from any directory. Reads `~/.specia/install-meta.json`, runs `git pull + rebuild + reinstall`.
+- **`specia update --check`** — Show current version and install metadata without updating.
+- **`specia changelog`** — Show full changelog, `--latest` for newest section, `--version X` for specific version.
+- **`./install.sh --update`** — Git pull + rebuild + reinstall all previously configured clients.
 - **"What's New" banner** — After every install or update, the latest CHANGELOG section is printed.
+- **Install meta** — `~/.specia/install-meta.json` stores repo path, installed version, timestamp, targets.
+
+### 🔍 Ad-hoc Scan + Debate (zero-setup)
+
+- **`specia scan --last-merge`** — Scan the last merged PR/MR in any git repo. No `.specia/` init required.
+- **`specia scan --diff <ref>`** — Scan any git diff range (e.g. `main..HEAD`, `HEAD~1`).
+- **`specia debate --last-merge`** — Combined scan + three-perspective debate in one shot.
+- **`specia debate --diff <ref>`** — Scan + debate any diff range.
+- **Standalone mode** — Results saved to `/tmp/specia-scans/` and `/tmp/specia-debates/` when no `.specia/` found.
+- **Auto-LLM** — If `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is set, scan/debate call the LLM directly. Falls back to prompt-only if no key.
+- **`--manual` / `--api` / `--model` flags** — Explicit control over LLM mode and model selection.
+
+### 📊 Security Posture Report
+
+- **`specia report`** — Compliance posture report from all archived changes in `.specia/specs/`.
+- **`specia report --since <duration>`** — Filter by age (`7d`, `30d`, `90d`).
+- **Posture levels** — `GOOD` 🟢 / `FAIR` 🟡 / `NEEDS_ATTENTION` 🔴 based on critical/high finding counts.
+- **`--format markdown`** — Full markdown output for inclusion in wikis or PR descriptions.
+
+### 🩺 Doctor
+
+- **`specia doctor`** — Health-check for install, project, active changes, and git context.
+  - Installation: meta, dist freshness, CLI in PATH, repo source
+  - Project: config.yaml, pre-commit hook, stale reviews, stuck changes
+  - Git: working tree state, last merge (for `--last-merge` readiness)
+- **`specia doctor --fix`** — Auto-repair: reinstalls hook if missing.
+- **`specia doctor --json`** — Structured output for CI gates (exit 1 on errors).
+
+### 🤖 Skills + Agents Coverage
+
+- **Copilot skills**: specia-scan, specia-debate, specia-doctor, specia-report, specia-update (all new)
+- **Claude Code agents**: specia-scan.md, specia-debate.md, specia-doctor.md, specia-report.md (all new)
+- **CLAUDE.md orchestrator**: "Ad-hoc Security Commands" routing table — scan/debate/doctor/report now routed to sub-agents automatically
+- **All new commands in `specia --list`** — Scan, debate, doctor, report, fleet, update, changelog, skills now appear in the command list
+
+### 🔧 CI/CD Templates
+
+- **`ci-templates/github-actions/specia-pr-scan.yml`** — GitHub Actions workflow: scans every PR, posts comment with severity breakdown (🔴🟡🟢), optional `VT_SPEC_FAIL_ON_HIGH` gate, 30-day artifact retention.
+- **`ci-templates/gitlab-ci/specia-scan.yml`** — GitLab CI equivalent.
+- **Zero setup** — Copy the template, commit, and every PR gets automatic security scanning.
 
 ---
 
@@ -92,12 +132,12 @@ All notable changes to SpecIA will be documented in this file.
 ### ✨ Design Phase
 
 - **`specia design <change>`** — Optional architecture design phase between spec and review.
-- **`specia-design` agent** — Writes `design.md` with system design, data flow, and security architecture.
+- **`vt-design` agent** — Writes `design.md` with system design, data flow, and security architecture.
 
 ### ✨ Audit Phase
 
 - **`specia audit <change>`** — Post-implementation code audit with structured JSON result submission.
-- **`specia-audit` agent** — Verifies requirements coverage and abuse case countermeasures.
+- **`vt-audit` agent** — Verifies requirements coverage and abuse case countermeasures.
 - **`--gate` flag** — Exit 1 if findings ≥ threshold (CI/CD integration).
 
 ---
@@ -108,18 +148,18 @@ All notable changes to SpecIA will be documented in this file.
 
 - **Monorepo Restructure** — SpecIA is now a monorepo with two editions:
   - **SpecIA Full** (`full/`) — Complete workflow with MCP server, CLI, 7 workflow phases, dynamic testing, abuse case verification, and compliance-grade audit trails. For release gates, compliance requirements, and high-security features.
-  - **SpecIA Lite** (`lite/`) — Lightweight alternative with 2 OpenCode skills (`specia-review-lite`, `specia-audit-lite`), no MCP server, optimized for speed and cost. For PR reviews, quick checks, and early development.
+  - **SpecIA Lite** (`lite/`) — Lightweight alternative with 2 OpenCode skills (`vt-review-lite`, `vt-audit-lite`), no MCP server, optimized for speed and cost. For PR reviews, quick checks, and early development.
 - **Hybrid Setup Support** — Both editions can coexist in the same environment. Use Lite for 80% of features, Full for 20% critical paths → **73% cost savings** vs Full-only.
 
 ### ✨ SpecIA Lite Features (NEW)
 
-- **`specia-review-lite` skill** — Quick STRIDE security review focusing on critical/high threats only
+- **`vt-review-lite` skill** — Quick STRIDE security review focusing on critical/high threats only
   - Token budget: ~3.5k total (~$0.009 per review)
   - Time: ~15 seconds (5x faster than Full)
   - Output: Max 10 threats, max 500 tokens
   - Watermark: `🚀 SpecIA LITE Review | ~15s | ~$0.009 | Critical/High Only`
   - NO abuse cases, NO DREAD scoring, NO audit trail
-- **`specia-audit-lite` skill** — Quick static audit verifying spec compliance and security gaps
+- **`vt-audit-lite` skill** — Quick static audit verifying spec compliance and security gaps
   - Token budget: ~5.8k total (~$0.020 per audit)
   - Time: ~30 seconds
   - Checks: Test file existence (grep), security gap fixes (grep), spec requirement coverage (basic)
@@ -269,7 +309,7 @@ cd lite && ./install-lite.sh
 - **Abuse Case Verification in Audit Reports** — Each abuse case from the security review is verified against the actual code with verdicts: `verified`, `unverified`, `partial`, `not_applicable`.
 - **Audit Staleness Detection** — Smart caching via SHA256 `audit_hash`. If code changes after an audit, the audit is marked stale. `specia_done` warns about stale or missing audits.
 - **Three Posture-Driven Audit Prompts** — Standard (verify requirements + top abuse cases), elevated (all abuse cases + OWASP patterns), paranoid (data flow tracing + DREAD scoring + test coverage analysis).
-- **Agent Prompt File** — `agents/claude-code/agents/specia-audit.md` for sub-agent delegation of audit phase.
+- **Agent Prompt File** — `agents/claude-code/agents/vt-audit.md` for sub-agent delegation of audit phase.
 
 ### Improvements
 
@@ -296,7 +336,7 @@ cd lite && ./install-lite.sh
 
 - **Abuse Cases in Security Review** — Attacker-centric scenario analysis integrated into the security review phase. Abuse cases document attacker goals, attack vectors, preconditions, impact, and mitigations. Analysis depth scales with the project's security posture: `standard` (top abuse cases), `elevated` (comprehensive abuse cases with OWASP mapping), `paranoid` (full abuse case matrix with DREAD scoring). Abuse cases render in review.md and feed into task generation as security mitigations.
 - **Orchestrator Agent Configs** — Ready-to-use agent configurations for 4 AI clients: OpenCode (JSON config + 6 slash commands), Claude Code (CLAUDE.md section + 5 sub-agent files), GitHub Copilot CLI (6 agent.md files with frontmatter), and VS Code Copilot Chat (instructions.md). All configs follow the same coordinator/sub-agent delegation pattern. A portable generic prompt is included for any MCP-compatible agent.
-- **6 OpenCode Slash Commands** — `/specia-init`, `/specia-new`, `/specia-continue`, `/specia-ff`, `/specia-review`, `/specia-status` — all routed through the specia workflow coordinator agent.
+- **6 OpenCode Slash Commands** — `/vt-init`, `/vt-new`, `/vt-continue`, `/vt-ff`, `/vt-review`, `/vt-status` — all routed through the specia workflow coordinator agent.
 - **Sub-Agent Delegation Pattern** — Orchestrator agents coordinate the workflow DAG without executing phases inline. Each phase (propose, spec, design, review, tasks) delegates to a focused sub-agent with its own context. This prevents context bloat in long sessions.
 
 ### Improvements

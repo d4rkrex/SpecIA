@@ -32,6 +32,7 @@ const COMMANDS: CommandInfo[] = [
   { name: 'ff', description: 'Fast-forward all phases (propose → tasks)', phase: 'shortcuts' },
   
   // Security tools
+  { name: 'scan', description: 'Ad-hoc security scan — any repo, no init needed', phase: 'security' },
   { name: 'debate', description: 'Multi-agent debate on security findings', phase: 'security' },
   { name: 'hook-install', description: 'Install Guardian pre-commit hook', phase: 'security' },
   { name: 'hook-uninstall', description: 'Remove Guardian pre-commit hook', phase: 'security' },
@@ -39,9 +40,15 @@ const COMMANDS: CommandInfo[] = [
   
   // Utilities
   { name: 'search', description: 'Search past specs and security findings', phase: 'utilities' },
+  { name: 'report', description: 'Security posture report from archived changes', phase: 'utilities' },
   { name: 'stats', description: 'Show token usage and cost analytics', phase: 'utilities' },
   { name: 'status', description: 'Show current change status', phase: 'utilities' },
+  { name: 'skills', description: 'List available SpecIA skills', phase: 'utilities' },
+  { name: 'fleet', description: 'Fleet orchestrator — parallel apply recommendations', phase: 'utilities' },
   { name: 'config', description: 'Manage SpecIA configuration', phase: 'utilities' },
+  { name: 'doctor', description: 'Health-check for install, project, and git context', phase: 'utilities' },
+  { name: 'update', description: 'Update SpecIA (git pull + rebuild + reinstall)', phase: 'utilities' },
+  { name: 'changelog', description: 'Show SpecIA changelog', phase: 'utilities' },
 ];
 
 export function registerListCommand(program: Command): void {

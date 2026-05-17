@@ -5,8 +5,11 @@ description: >
   task completion, scope compliance, and .specia/ integrity. Mandatory for fan-out apply.
   Trigger: When orchestrator runs verify after multi-agent apply, or user says "specia-verify".
 license: MIT
+phases: [apply]
+user_invocable: false
+agent_type: copilot
 metadata:
-  author: SpecIA Team
+  author: mroldan
   version: "1.0"
 ---
 

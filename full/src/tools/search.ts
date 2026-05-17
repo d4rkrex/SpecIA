@@ -13,6 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { FileStore } from "../services/store.js";
 import { tryRecall } from "../services/memory-ops.js";
+import { FindingsStore } from "../services/analytics.js";
 import { SearchInputSchema } from "./schemas.js";
 import { ok, fail, ErrorCodes } from "../types/tools.js";
 import type { ToolResult } from "../types/index.js";
@@ -108,6 +109,28 @@ export async function handleSearch(
     if (config.memory.backend !== "local" && results.length > 0) {
       warnings.push("Results from local files only — Alejandria not available for semantic search.");
     }
+  }
+
+  // v2.4: Also query the cross-change findings store (Colmena-inspired)
+  try {
+    const findingsStore = new FindingsStore();
+    const queryTerms = input.query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+    const allFindings = findingsStore.queryFindings({ projectPath: rootDir, limit: 50 });
+    for (const f of allFindings) {
+      const searchText = `${f.title} ${f.category} ${f.mitigation_summary}`.toLowerCase();
+      const matchCount = queryTerms.filter(t => searchText.includes(t)).length;
+      if (matchCount > 0) {
+        results.push({
+          change_name: f.change_name,
+          type: "security-finding",
+          excerpt: `[${f.finding_id}] ${f.title} (${f.severity}) — ${f.mitigation_summary.slice(0, 200)}`,
+          score: matchCount / queryTerms.length,
+          source: "local",
+        });
+      }
+    }
+  } catch {
+    // Non-fatal — findings search failure must not break main search
   }
 
   return ok(

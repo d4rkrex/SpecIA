@@ -27,6 +27,7 @@ import type {
 import { buildStandardPrompt } from "../prompts/review-standard.js";
 import { buildElevatedPrompt } from "../prompts/review-elevated.js";
 import { buildParanoidPrompt } from "../prompts/review-paranoid.js";
+import { prependModelHint } from "./template.js";
 
 // ── Prompt Generation ────────────────────────────────────────────────
 
@@ -56,19 +57,34 @@ export function generateReviewPrompt(ctx: ReviewContext): ReviewPrompt {
     designContent: ctx.designContent,
   };
 
+  let prompt: ReviewPrompt;
   switch (posture) {
     case "standard":
-      return buildStandardPrompt(base);
+      prompt = buildStandardPrompt(base);
+      break;
     case "elevated":
-      return buildElevatedPrompt({ ...base, pastFindings: ctx.pastFindings });
+      prompt = buildElevatedPrompt({ ...base, pastFindings: ctx.pastFindings });
+      break;
     case "paranoid":
-      return buildParanoidPrompt({ ...base, pastFindings: ctx.pastFindings });
+      prompt = buildParanoidPrompt({ ...base, pastFindings: ctx.pastFindings });
+      break;
     default: {
       // Exhaustive check — should never happen if config is validated
       const _exhaustive: never = posture;
       throw new Error(`Unknown posture: ${_exhaustive}`);
     }
   }
+
+  // v2.4: Prepend per-phase model routing hint (R2)
+  const modelHint = ctx.config.models?.review;
+  if (modelHint) {
+    prompt = {
+      ...prompt,
+      analysis_request: prependModelHint(prompt.analysis_request, modelHint),
+    };
+  }
+
+  return prompt;
 }
 
 // ── Result Validation ────────────────────────────────────────────────

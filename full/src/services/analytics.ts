@@ -301,3 +301,130 @@ export function calculateCost(
   
   return inputCost + outputCost;
 }
+
+// ── Findings persistence (v2.4) ──────────────────────────────────────
+
+/**
+ * A security finding extracted from a review.md and persisted cross-change.
+ * Colmena-inspired: allows querying historical findings across all archived changes.
+ */
+export interface PersistedFinding {
+  id?: number;
+  timestamp: string;
+  change_name: string;
+  project_path: string;
+  finding_id: string;       // e.g. "T-01", "AC-02"
+  category: string;         // STRIDE category or "abuse_case"
+  title: string;
+  severity: string;         // critical | high | medium | low
+  mitigation_summary: string;
+}
+
+export class FindingsStore {
+  private db: Database.Database | null = null;
+  private disabled: boolean = false;
+
+  constructor(customPath?: string, disabled = false) {
+    this.disabled = disabled;
+    if (disabled) return;
+
+    const dataDir = customPath
+      ? path.dirname(customPath)
+      : path.join(os.homedir(), ".local", "share", "specia");
+
+    const dbPath = customPath || path.join(dataDir, "analytics.db");
+
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    this.db = new Database(dbPath);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS findings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        change_name TEXT NOT NULL,
+        project_path TEXT NOT NULL,
+        finding_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        mitigation_summary TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_findings_change ON findings(change_name);
+      CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
+      CREATE INDEX IF NOT EXISTS idx_findings_category ON findings(category);
+      CREATE INDEX IF NOT EXISTS idx_findings_project ON findings(project_path);
+    `);
+  }
+
+  /**
+   * Persist a batch of findings for a completed change.
+   * SECURITY: Uses parameterized queries exclusively.
+   */
+  persistFindings(findings: Omit<PersistedFinding, "id">[]): void {
+    if (this.disabled || !this.db || findings.length === 0) return;
+
+    const stmt = this.db.prepare(`
+      INSERT INTO findings (timestamp, change_name, project_path, finding_id, category, title, severity, mitigation_summary)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const insertMany = this.db.transaction((rows: Omit<PersistedFinding, "id">[]) => {
+      for (const row of rows) {
+        stmt.run(
+          row.timestamp,
+          row.change_name,
+          row.project_path,
+          row.finding_id,
+          row.category,
+          row.title,
+          row.severity,
+          row.mitigation_summary,
+        );
+      }
+    });
+
+    insertMany(findings);
+  }
+
+  /**
+   * Query findings across all archived changes.
+   * Returns findings matching the given filters (all optional).
+   * SECURITY: Parameterized queries; severity filtered against allowlist.
+   */
+  queryFindings(opts: {
+    projectPath?: string;
+    severity?: string;
+    category?: string;
+    limit?: number;
+  } = {}): PersistedFinding[] {
+    if (this.disabled || !this.db) return [];
+
+    const VALID_SEVERITIES = new Set(["critical", "high", "medium", "low"]);
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (opts.projectPath) {
+      conditions.push("project_path = ?");
+      params.push(opts.projectPath);
+    }
+    if (opts.severity && VALID_SEVERITIES.has(opts.severity)) {
+      conditions.push("severity = ?");
+      params.push(opts.severity);
+    }
+    if (opts.category) {
+      conditions.push("category = ?");
+      params.push(opts.category);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limitClause = `LIMIT ${Math.min(opts.limit ?? 100, 500)}`;
+
+    const stmt = this.db.prepare(
+      `SELECT * FROM findings ${where} ORDER BY timestamp DESC ${limitClause}`
+    );
+
+    return stmt.all(...params) as PersistedFinding[];
+  }
+}

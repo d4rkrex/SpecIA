@@ -177,6 +177,16 @@ export const StatsInputSchema = z.object({
   change_name: changeNameSchema.optional(),
 });
 
+// v2.4: Skills registry schema
+export const SkillsInputSchema = z.object({
+  /** Filter by agent type (copilot, claude-code, generic, opencode, orchestrator) */
+  agent_type: z.string().max(50).optional(),
+  /** Filter by SpecIA phase (propose, spec, review, apply, audit, done, etc.) */
+  phase: z.string().max(50).optional(),
+  /** If true, only return skills the user can invoke directly (default: false = all) */
+  user_invocable_only: z.boolean().optional(),
+});
+
 // ── Type exports ─────────────────────────────────────────────────────
 
 export type InitInput = z.infer<typeof InitInputSchema>;
@@ -200,3 +210,5 @@ export type AuditInput = z.infer<typeof AuditInputSchema>;
 export type DebateInput = z.infer<typeof DebateInputSchema>;
 // v0.9 type exports
 export type StatsInput = z.infer<typeof StatsInputSchema>;
+// v2.4 type exports
+export type SkillsInput = z.infer<typeof SkillsInputSchema>;

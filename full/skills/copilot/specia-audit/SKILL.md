@@ -5,8 +5,11 @@ description: >
   Proves with real execution that security mitigations work and spec requirements are satisfied.
   Trigger: When user says "specia-audit", "audit code", "verify implementation".
 license: MIT
+phases: [audit]
+user_invocable: true
+agent_type: copilot
 metadata:
-  author: SpecIA Team
+  author: mroldan
   version: "2.0"
 ---
 

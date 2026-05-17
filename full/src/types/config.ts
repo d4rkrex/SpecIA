@@ -122,11 +122,30 @@ export interface EconomicsConfig {
 }
 
 /**
+ * Per-phase LLM model routing configuration.
+ *
+ * Maps each SpecIA phase to a preferred model identifier. The orchestrating agent
+ * reads the model hint from the phase's generated prompt and routes accordingly.
+ * Inspired by Gentle-AI's per-phase model assignment pattern.
+ *
+ * Values are free-form strings validated against /^[a-zA-Z0-9\-\.\/:]+$/ (max 100 chars).
+ * SpecIA does not verify model existence — only format is validated.
+ */
+export interface ModelsConfig {
+  spec?: string;
+  design?: string;
+  review?: string;
+  tasks?: string;
+  audit?: string;
+}
+
+/**
  * Root SpecIA configuration — the full schema for .specia/config.yaml.
  *
  * Spec refs: Domain 5 (config.yaml Schema), Domain 10 (Exactly 4 Questions)
  * Design refs: Decision 2
  * v0.2: Added optional guardian, cli, workflow sections.
+ * v2.4: Added optional models section for per-phase model routing.
  */
 export interface VtspecConfig {
   version: string;
@@ -141,4 +160,6 @@ export interface VtspecConfig {
   workflow?: WorkflowConfig;
   /** v0.9: Token economics / cost estimation. Optional — absent means no cost tracking. */
   economics?: EconomicsConfig;
+  /** v2.4: Per-phase LLM model routing. Optional — absent means no model preference. */
+  models?: ModelsConfig;
 }

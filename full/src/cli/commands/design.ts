@@ -8,7 +8,7 @@
 
 import { Command } from "commander";
 import { FileStore } from "../../services/store.js";
-import { renderDesignPrompt } from "../../services/template.js";
+import { renderDesignPrompt, prependModelHint } from "../../services/template.js";
 import {
   success,
   error,
@@ -70,7 +70,10 @@ export function registerDesignCommand(program: Command): void {
           return;
         }
 
-        const designPrompt = renderDesignPrompt(changeName, proposalContent, specContent);
+        const designPrompt = prependModelHint(
+          renderDesignPrompt(changeName, proposalContent, specContent),
+          store.readConfig()?.models?.design,
+        );
 
         if (isJsonMode()) {
           jsonOutput({

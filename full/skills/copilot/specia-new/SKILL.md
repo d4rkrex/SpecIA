@@ -4,8 +4,11 @@ description: >
   Create a new SpecIA change proposal. Shortcut for specia propose.
   Trigger: When user says "specia-new", "new specia change", "create change proposal".
 license: MIT
+phases: [propose]
+user_invocable: true
+agent_type: copilot
 metadata:
-  author: SpecIA Team
+  author: mroldan
   version: "2.0"
 ---
 

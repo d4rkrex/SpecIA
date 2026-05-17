@@ -1,3 +1,16 @@
+---
+name: specia-opencode
+description: >
+  Full SpecIA workflow skill for OpenCode.
+license: MIT
+phases: [propose,spec,review,tasks,apply,audit,done]
+user_invocable: true
+agent_type: opencode
+metadata:
+  author: mroldan
+  version: "2.0"
+---
+
 # SpecIA FULL — Security-Aware Spec-Driven Development
 
 > **Skill for OpenCode** — SpecIA FULL workflow coordinator (compliance-grade with audit trail).
@@ -7,7 +20,7 @@
 ## Triggers
 
 Load this skill when:
-- User says "specia", "specia", "spec-driven", "full workflow", "compliance review", "new change"
+- User says "specia", "vt-spec", "spec-driven", "full workflow", "compliance review", "new change"
 - User wants complete security analysis with abuse cases and audit trail
 - You see a `.specia/` directory in the project
 - User asks to continue or fast-forward a change

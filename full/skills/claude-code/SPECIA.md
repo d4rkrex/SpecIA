@@ -1,3 +1,16 @@
+---
+name: specia-claude-code
+description: >
+  Full SpecIA workflow skill for Claude Code. Orchestrates the CLI workflow.
+license: MIT
+phases: [propose,spec,review,tasks,apply,audit,done]
+user_invocable: true
+agent_type: claude-code
+metadata:
+  author: mroldan
+  version: "2.0"
+---
+
 # SpecIA — Security-Aware Spec-Driven Development
 
 > **Skill for Claude Code** — Load this skill to orchestrate the SpecIA workflow via CLI commands.

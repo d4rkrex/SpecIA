@@ -28,6 +28,8 @@ import * as path from "node:path";
 import { FileStore } from "../services/store.js";
 import { EMPTY_SHA256_SENTINEL } from "../services/audit.js";
 import { tryStore } from "../services/memory-ops.js";
+import { FindingsStore } from "../services/analytics.js";
+import { parseReviewFindings } from "../services/review-parser.js";
 import { DoneInputSchema } from "./schemas.js";
 import { ok, fail, ErrorCodes } from "../types/tools.js";
 import type { ToolResult } from "../types/index.js";
@@ -180,9 +182,37 @@ export async function handleDone(
     }
   }
 
-  // Read spec content before archiving for Alejandria storage
+  // Read spec content before archiving for Alejandría storage
   const specContent = store.readArtifact(input.change_name, "spec");
   const config = store.readConfig();
+
+  // v2.4: Index security findings into cross-change findings store (Colmena-inspired)
+  // Parse findings from review.md and persist before archiving the change directory
+  try {
+    const reviewContent = store.readArtifact(input.change_name, "review");
+    if (reviewContent) {
+      const parsedFindings = parseReviewFindings(reviewContent);
+      if (parsedFindings.length > 0) {
+        const findingsStore = new FindingsStore();
+        const timestamp = new Date().toISOString();
+        findingsStore.persistFindings(
+          parsedFindings.map(f => ({
+            timestamp,
+            change_name: input.change_name,
+            project_path: rootDir,
+            finding_id: f.id,
+            category: f.category,
+            title: f.title,
+            severity: f.severity,
+            mitigation_summary: f.mitigation?.slice(0, 500) ?? "",
+          }))
+        );
+      }
+    }
+  } catch {
+    // Non-fatal — findings indexing failure must never block archiving
+    warnings.push("Could not index security findings into cross-change store.");
+  }
 
   // Archive the change (v0.6: with force flag info and audit/review preservation)
   // v0.7: archiveChange() returns the actual archived path (fix-done-verification)

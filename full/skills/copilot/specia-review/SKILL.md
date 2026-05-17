@@ -4,8 +4,11 @@ description: >
   Run mandatory security review on a SpecIA change. Performs STRIDE/OWASP analysis and generates abuse cases.
   Trigger: When user says "specia-review", "security review", "review specia change".
 license: MIT
+phases: [review]
+user_invocable: true
+agent_type: copilot
 metadata:
-  author: SpecIA Team
+  author: mroldan
   version: "2.0"
 ---
 

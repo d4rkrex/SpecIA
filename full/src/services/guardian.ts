@@ -179,6 +179,24 @@ export class GuardianService {
     // Filter excluded paths
     const filtered = this.filterExcluded(stagedFiles, guardianConfig.exclude);
 
+    // v2.4: Self-protecting config — detect staged writes to critical SpecIA artifacts
+    // Colmena-inspired: prevents agents from auto-approving their own reviews or tampering with config
+    const protectedViolations = this.checkProtectedFiles(filtered, mode);
+    if (protectedViolations.length > 0) {
+      const hasBlocking = protectedViolations.some(v => v.status === "fail");
+      if (mode === "strict" && hasBlocking) {
+        return {
+          timestamp: new Date().toISOString(),
+          mode,
+          staged_files: stagedFiles.length,
+          results: protectedViolations,
+          summary: { passed: 0, warnings: 0, violations: protectedViolations.length },
+          integrity_status: integrityResult.status !== "tampered" ? "valid" : integrityResult.status,
+        };
+      }
+      // In warn mode: include violations in results but continue
+    }
+
     // Load all active changes
     const changes = this.loadActiveChanges();
 
@@ -271,17 +289,20 @@ export class GuardianService {
     // Write cache
     this.saveCache(cache);
 
+    // Merge protected file violations into results
+    const allResults = [...protectedViolations, ...results];
+
     const summary = {
-      passed: results.filter((r) => r.status === "pass").length,
-      warnings: results.filter((r) => r.status === "warn").length,
-      violations: results.filter((r) => r.status === "fail").length,
+      passed: allResults.filter((r) => r.status === "pass").length,
+      warnings: allResults.filter((r) => r.status === "warn").length,
+      violations: allResults.filter((r) => r.status === "fail").length,
     };
 
     return {
       timestamp: new Date().toISOString(),
       mode,
       staged_files: filtered.length,
-      results,
+      results: allResults,
       summary,
     };
   }
@@ -1018,6 +1039,46 @@ export class GuardianService {
     return files.filter((file) => {
       return !excludePatterns.some((pattern) => this.matchGlob(file, pattern));
     });
+  }
+
+  /**
+   * v2.4: Self-protecting config check (Colmena-inspired).
+   *
+   * Detects staged writes to critical SpecIA artifacts that should never be
+   * modified by an automated agent: config.yaml, review.md, state.yaml.
+   * Preventing agents from auto-approving their own reviews or tampering with config.
+   *
+   * Returns FileValidation entries: fail in strict mode, warn in warn mode.
+   */
+  private checkProtectedFiles(files: string[], mode: GuardianMode): FileValidation[] {
+    // Patterns that match protected SpecIA artifacts (relative to project root)
+    const PROTECTED_PATTERNS = [
+      ".specia/config.yaml",
+      ".specia/changes/*/review.md",
+      ".specia/changes/*/state.yaml",
+      ".specia/changes/*/audit.md",
+    ];
+
+    const violations: FileValidation[] = [];
+
+    for (const file of files) {
+      const isProtected = PROTECTED_PATTERNS.some(pattern => this.matchGlob(file, pattern));
+      if (isProtected) {
+        violations.push({
+          file,
+          status: mode === "strict" ? "fail" : "warn",
+          reason: "SpecIA protected artifact — staged write blocked",
+          checks: {
+            spec_exists: null,
+            review_complete: null,
+            mitigations_done: null,
+            spec_match: null,
+          },
+        });
+      }
+    }
+
+    return violations;
   }
 
   /**

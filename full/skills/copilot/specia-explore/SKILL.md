@@ -4,8 +4,11 @@ description: >
   Security-focused exploration before SpecIA proposal. Investigates codebase patterns, security controls, and attack surfaces.
   Trigger: When user says "specia-explore", "explore before proposal", "investigate security gaps", or before starting a SpecIA change.
 license: MIT
+phases: [explore]
+user_invocable: true
+agent_type: copilot
 metadata:
-  author: SpecIA Team
+  author: mroldan
   version: "1.0"
 ---
 
@@ -209,9 +212,9 @@ Return EXACTLY this structure:
 ```
 specia-explore → findings saved
     ↓
-specia-propose → reads exploration, aligned proposal
+vt-propose → reads exploration, aligned proposal
     ↓
-specia → requirements from chosen approach
+vt-spec → requirements from chosen approach
     ↓
 specia-review → abuse cases from gaps identified
 ```

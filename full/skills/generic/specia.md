@@ -1,3 +1,16 @@
+---
+name: specia-generic
+description: >
+  Full SpecIA workflow skill for any bash-capable AI agent.
+license: MIT
+phases: [propose,spec,review,tasks,apply,audit,done]
+user_invocable: true
+agent_type: generic
+metadata:
+  author: mroldan
+  version: "2.0"
+---
+
 # SpecIA — Security-Aware Spec-Driven Development
 
 > **Generic Agent Skill** — Compatible with any AI agent that can execute bash commands

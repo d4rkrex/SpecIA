@@ -5,8 +5,11 @@ description: >
   Uses dual-track persistence (files + Alejandría) for recovery and search.
   Trigger: When user says "specia-apply", "implement tasks", "write code for specia change".
 license: MIT
+phases: [apply]
+user_invocable: true
+agent_type: copilot
 metadata:
-  author: SpecIA Team
+  author: mroldan
   version: "2.0"
 ---
 

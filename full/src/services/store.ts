@@ -97,6 +97,17 @@ const ConfigSchema = z.object({
       cache_read_ratio: z.number().nonnegative().optional(),
     })
     .optional(),
+  // v2.4: Per-phase model routing (optional — absent means no model preference)
+  // T-01 mitigation: strict regex prevents injection; max 100 chars prevents DoS
+  models: z
+    .object({
+      spec: z.string().regex(/^[a-zA-Z0-9\-.\/:]+$/, "Model identifier contains invalid characters").max(100).optional(),
+      design: z.string().regex(/^[a-zA-Z0-9\-.\/:]+$/, "Model identifier contains invalid characters").max(100).optional(),
+      review: z.string().regex(/^[a-zA-Z0-9\-.\/:]+$/, "Model identifier contains invalid characters").max(100).optional(),
+      tasks: z.string().regex(/^[a-zA-Z0-9\-.\/:]+$/, "Model identifier contains invalid characters").max(100).optional(),
+      audit: z.string().regex(/^[a-zA-Z0-9\-.\/:]+$/, "Model identifier contains invalid characters").max(100).optional(),
+    })
+    .optional(),
 });
 
 /**

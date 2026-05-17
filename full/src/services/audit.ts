@@ -43,6 +43,7 @@ import type {
 import { buildStandardAuditPrompt } from "../prompts/audit-standard.js";
 import { buildElevatedAuditPrompt } from "../prompts/audit-elevated.js";
 import { buildParanoidAuditPrompt } from "../prompts/audit-paranoid.js";
+import { prependModelHint } from "./template.js";
 
 // ── Context Interface ────────────────────────────────────────────────
 
@@ -606,18 +607,33 @@ export function generateAuditPrompt(ctx: AuditContext): AuditPrompt {
     proposalContent: ctx.proposalContent,
   };
 
+  let prompt: AuditPrompt;
   switch (posture) {
     case "standard":
-      return buildStandardAuditPrompt(base);
+      prompt = buildStandardAuditPrompt(base);
+      break;
     case "elevated":
-      return buildElevatedAuditPrompt(base);
+      prompt = buildElevatedAuditPrompt(base);
+      break;
     case "paranoid":
-      return buildParanoidAuditPrompt(base);
+      prompt = buildParanoidAuditPrompt(base);
+      break;
     default: {
       const _exhaustive: never = posture;
       throw new Error(`Unknown posture: ${_exhaustive}`);
     }
   }
+
+  // v2.4: Prepend per-phase model routing hint
+  const modelHint = ctx.config.models?.audit;
+  if (modelHint) {
+    prompt = {
+      ...prompt,
+      analysis_request: prependModelHint(prompt.analysis_request, modelHint),
+    };
+  }
+
+  return prompt;
 }
 
 // ── Markdown Rendering ───────────────────────────────────────────────

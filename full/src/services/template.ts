@@ -242,6 +242,24 @@ export function renderTasks(data: TasksData): string {
   return lines.join("\n");
 }
 
+// ── model hint (v2.4) ────────────────────────────────────────────────
+
+/**
+ * Prepend a model routing hint to a phase's prompt text.
+ *
+ * When the project config specifies a preferred model for a phase, this hint
+ * is prepended so the orchestrating agent can route to the correct model.
+ *
+ * T-01 mitigation: model string is validated at config read time (ConfigSchema).
+ * This function trusts that the value has already been validated.
+ *
+ * Spec refs: phase-model-routing R2 (Prompt rendering)
+ */
+export function prependModelHint(text: string, model: string | undefined): string {
+  if (!model) return text;
+  return `> **Model Routing**: Preferred model for this phase: \`${model}\`\n\n${text}`;
+}
+
 // ── design prompt (v0.2) ─────────────────────────────────────────────
 
 /**

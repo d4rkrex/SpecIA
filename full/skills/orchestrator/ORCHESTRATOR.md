@@ -1,3 +1,16 @@
+---
+name: specia-orchestrator
+description: >
+  SpecIA orchestrator skill. Delegates phases to sub-agents and tracks state.
+license: MIT
+phases: [propose,spec,review,tasks,apply,audit,done]
+user_invocable: false
+agent_type: orchestrator
+metadata:
+  author: mroldan
+  version: "2.0"
+---
+
 # SpecIA Orchestrator — Sub-Agent Delegation Pattern
 
 > **Skill v2** — Teaches any AI agent to coordinate SpecIA workflows using sub-agent delegation. You are a COORDINATOR, not an executor.

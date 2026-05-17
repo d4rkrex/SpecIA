@@ -18,6 +18,19 @@ security:
 memory:
   backend: local  # local | engram (if using Alejandría persistent memory)
 
+# Per-phase model routing (optional, v2.4 — Gentle-AI inspired)
+# Hint which model to use for each SpecIA phase. The agent reads this hint
+# and selects the appropriate model if supported by the platform.
+# models:
+#   propose: claude-opus-4
+#   spec: claude-sonnet-4-5
+#   review: claude-opus-4          # Use most capable model for security review
+#   tasks: claude-sonnet-4-5
+#   apply: claude-sonnet-4-5
+#   audit: claude-opus-4           # Use most capable model for auditing
+#   design: claude-opus-4
+#   explore: claude-haiku-3-5      # Use fast model for codebase exploration
+
 # Exploration settings (optional - runs before propose to investigate codebase)
 explore:
   mode: auto  # auto | always | never | prompt

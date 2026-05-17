@@ -1,7 +1,7 @@
 /**
  * SpecIA MCP Server — Entry point.
  *
- * Registers all 17 tools (7 core + 1 search + 3 shortcuts + 1 design + 1 audit + 3 guardian + 1 debate + 1 stats) and wires stdio transport.
+ * Registers all 18 tools (7 core + 1 search + 3 shortcuts + 1 design + 1 audit + 3 guardian + 1 debate + 1 stats + 1 skills) and wires stdio transport.
  * Phase 4: All tools fully implemented including shortcuts (continue, ff, new).
  * v0.2: Added specia_design tool for optional architecture design phase.
  * v0.2: Added specia_hook_install, specia_hook_uninstall, specia_hook_status for Guardian hook management.
@@ -39,6 +39,7 @@ import {
   HookStatusInputSchema,
   DebateInputSchema,
   StatsInputSchema,
+  SkillsInputSchema,
 } from "./tools/schemas.js";
 import { ErrorCodes, fail } from "./types/tools.js";
 import { getToolRateLimit } from "./cli/security/limits.js";
@@ -60,6 +61,7 @@ import { handleHookStatus } from "./tools/hook-status.js";
 import { handleAudit } from "./tools/audit.js";
 import { handleVtspecDebate } from "./tools/debate.js";
 import { handleStats } from "./tools/stats.js";
+import { handleSkills } from "./tools/skills.js";
 
 // ── Tool definitions ─────────────────────────────────────────────────
 
@@ -165,6 +167,12 @@ const TOOL_DEFINITIONS = [
     description:
       "Show token usage and cost summary for a change. If change_name is omitted, shows all changes. Returns per-phase token breakdown with totals and estimated costs (when economics is configured).",
     inputSchema: zodToJsonSchema(StatsInputSchema),
+  },
+  {
+    name: "specia_skills",
+    description:
+      "List available SpecIA skills with metadata: name, description, agent_type, phases, and user_invocable flag. Optionally filter by agent type (copilot, claude-code, generic, opencode), phase (propose, review, apply, audit, etc.), or user_invocable_only.",
+    inputSchema: zodToJsonSchema(SkillsInputSchema),
   },
 ];
 
@@ -320,6 +328,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Stats
     case "specia_stats":
       return formatResponse(await handleStats(args, rootDir));
+
+    // Skills registry
+    case "specia_skills":
+      return formatResponse(await handleSkills(args, rootDir));
 
     default: {
       const response = fail("unknown", [

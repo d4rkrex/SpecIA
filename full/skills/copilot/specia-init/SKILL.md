@@ -4,8 +4,11 @@ description: >
   Initialize SpecIA in a project. Creates .specia/ directory and config.yaml. 
   Trigger: When user says "specia-init", "specia init", "initialize specia", or wants to set up SpecIA.
 license: MIT
+phases: [init]
+user_invocable: true
+agent_type: copilot
 metadata:
-  author: SpecIA Team
+  author: mroldan
   version: "2.0"
 ---
 

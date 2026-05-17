@@ -2,6 +2,106 @@
 
 All notable changes to SpecIA will be documented in this file.
 
+## [2.5.0] — 2026-05-17
+
+### 🚀 Fleet Orchestrator — Intelligent Parallel Apply
+
+- **`FleetRecommendation`** — New type in `apply-manifest.yaml`: `{ mode, score, reasons }`. Score 0–100 determines whether fan-out apply is worth the overhead.
+- **`computeFleetRecommendation()`** — Scoring algorithm: +40 multi-group, +20 substantive groups (≥2 tasks each), +20 total tasks ≥6, +20 clean file ownership; −50 restricted paths in scope, −30 security keyword in change name. Threshold: score ≥ 60 → `fleet`.
+- **`specia fleet check <change>`** — New CLI command: shows fleet recommendation, score bar, and reasons. `--json` flag for structured output. Informational only (exit 0 always).
+- **`specia-fleet` Copilot skill** — Orchestrates parallel specia-apply workers. Enforces: manifest integrity check (T-01), worker read/write scope (T-05), mandatory specia-verify gate after all workers (T-03), token budget warning (T-04).
+- **`specia-fleet.md` Claude Code agent** — Parallel apply via Task tool. Same security constraints as Copilot skill.
+- **Apply phase routing** — `CLAUDE.md.section` now checks `fleet_recommendation.mode` before delegating: `fan-out + fleet` → specia-fleet, otherwise → specia-apply.
+- **`specia-verify` hardened** — tasks_hash integrity check added as check #0 (before all other checks). Aborts with `MANIFEST_TAMPERED` error if hash mismatch detected.
+
+### 🔄 Update Mechanism (NEW)
+
+- **`./install.sh --update`** — Git pull + rebuild + reinstall all previously configured clients. Shows version diff and "What's New" from CHANGELOG.
+- **`specia update`** — Run from any directory. Reads `~/.specia/install-meta.json` to find the repo, then runs `git pull` + `./install.sh --update`.
+- **Install meta** — `~/.specia/install-meta.json` stores: repo path, installed version, timestamp, configured clients. Written/updated on every install.
+- **"What's New" banner** — After every install or update, the latest CHANGELOG section is printed.
+
+---
+
+## [2.4.0] — 2026-05-17
+
+### 🔒 Guardian Self-Protection
+
+- **`guardProtectedFiles()`** — Guardian now protects its own SpecIA artifacts from modification during apply. Files in `.specia/changes/{name}/` (spec.md, review.md, tasks.md) are read-only for workers. Any staged change to these files is blocked with `GUARDIAN_SELF_PROTECT` error.
+- **Protected path patterns** — Configurable via `.specia/config.yaml` `guardian.protected_paths`.
+
+### 📊 Findings Persistent Store
+
+- **`FindingsStore`** (SQLite) — Security findings indexed in `~/.specia/findings.db` at `specia done` time. Schema: `id, change, threat_id, title, severity, mitigation, archived_at`.
+- **`specia search`** — Now queries FindingsStore alongside local file search. Cross-change findings retrieval.
+- **`parseReviewFindings()`** — Extracts structured findings from review.md on archive.
+
+### 🧩 Skill Registry
+
+- **`specia skills`** — New CLI command: lists all available SpecIA skills with filtering by `--agent`, `--phase`, `--user-invocable`. `--json` output.
+- **`specia_skills` MCP tool** — Same as CLI, accessible from MCP clients.
+- **SKILL.md frontmatter** — All built-in skills now have: `name`, `description`, `phases`, `user_invocable`, `agent_type`, `metadata`.
+- **`skill-registry.ts`** — Discovery service: scans `skills/` directories, parses YAML frontmatter, caches result.
+
+### 🎯 Per-Phase Model Routing
+
+- **`models:` config** — `.specia/config.yaml` now supports `models: { review: "claude-opus-4", audit: "claude-opus-4", design: "gpt-4o" }`. Per-phase model overrides.
+- **Model hint injection** — Review, audit, and design phases inject a `<!-- SpecIA model: X -->` hint into generated prompts for agents that support model routing.
+
+### 🐛 Bug Fixes
+
+- Fixed `CLAUDE.md.section` delegation prompts incorrectly referencing "Call specia_X MCP tool" — replaced with direct file operation instructions for Claude Code agents.
+- Fixed "MCP Tool" column in Workflow DAG — renamed to "How it works".
+- Fixed invalid `apply` phase in state.yaml enum (valid phases: proposal|spec|design|review|tasks|audit).
+
+---
+
+## [2.3.0] — 2026-05-10
+
+### ✨ Bake Mode
+
+- **`specia bake create <name>`** — Save project configs as reusable shortcuts.
+- **`@shortcut` syntax** — `specia @myapp review my-change` applies saved config.
+- **`specia bake list/verify`** — List and integrity-check saved configs.
+- **API key resolution** — `api_key: $ENV_VAR` resolved at runtime, never stored.
+
+### ✨ Stats + List Commands
+
+- **`specia list`** — List all active changes with status and phase.
+- **`specia stats`** — Aggregated metrics: changes by phase, findings by severity, audit pass rate.
+
+### 🐛 Bug Fixes
+
+- Fixed hash mismatch in GuardianService (false-positive stale detection).
+- Fixed `specia_ff` blocking at design step when review was already complete.
+- Fixed `specia_continue` returning no `next_tool` when all phases complete.
+- Fixed CLI commands hanging on stdin read in non-TTY environments.
+- Fixed Guardian validation failing on fully-complete workflows.
+
+---
+
+## [2.2.0] — 2026-05-01
+
+### ✨ Apply Manifest (Multi-Agent Foundation)
+
+- **`apply-manifest.yaml`** — Generated after `specia tasks`. Defines `pattern` (sequential/fan-out), task groups with exclusive `files_owned`, `tasks_hash` integrity, `review_hash`.
+- **`MAX_PARALLEL_WORKERS = 5`** — Cap on parallel apply workers.
+- **`RESTRICTED_PATH_PATTERNS`** — Sensitive paths excluded from worker ownership.
+- **`specia-verify` skill** — Post-fan-out verification gate: Threat ID coverage, task completion, scope compliance, artifact integrity, git diff validation.
+
+### ✨ Design Phase
+
+- **`specia design <change>`** — Optional architecture design phase between spec and review.
+- **`specia-design` agent** — Writes `design.md` with system design, data flow, and security architecture.
+
+### ✨ Audit Phase
+
+- **`specia audit <change>`** — Post-implementation code audit with structured JSON result submission.
+- **`specia-audit` agent** — Verifies requirements coverage and abuse case countermeasures.
+- **`--gate` flag** — Exit 1 if findings ≥ threshold (CI/CD integration).
+
+---
+
 ## [2.1.0] — 2026-04-18
 
 ### 🚀 Major Changes

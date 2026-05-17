@@ -26,6 +26,8 @@ import { registerStatsCommand } from "./commands/stats.js";
 import { registerBakeCommand } from "./commands/bake.js";
 import { registerSkillsCommand } from "./commands/skills.js";
 import { registerFleetCommand } from "./commands/fleet.js";
+import { registerUpdateCommand } from "./commands/update.js";
+import { registerChangelogCommand } from "./commands/changelog.js";
 import { BakeService } from "../services/bake.js";
 // import { registerDebateCommand } from "./commands/debate.js";
 
@@ -34,7 +36,7 @@ const program = new Command();
 program
   .name("specia")
   .description("Security-aware spec-driven development CLI")
-  .version("2.3.1")
+  .version("2.5.0")
   .option("--json", "Output structured JSON")
   .option("--quiet", "Suppress non-essential output")
   .hook("preAction", (_thisCommand, actionCommand) => {
@@ -66,6 +68,8 @@ registerStatsCommand(program);
 registerBakeCommand(program);
 registerSkillsCommand(program);
 registerFleetCommand(program);
+registerUpdateCommand(program);
+registerChangelogCommand(program);
 // registerDebateCommand(program);
 
 // Handle @shortcut syntax before parsing

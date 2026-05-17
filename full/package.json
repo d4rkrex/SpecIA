@@ -1,6 +1,6 @@
 {
   "name": "@appsec/specia",
-  "version": "2.3.1",
+  "version": "2.5.0",
   "type": "module",
   "description": "Security-aware spec-driven development MCP server",
   "license": "MIT",

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SpecIA Installer — run from inside the cloned repo
-#   git clone https://gitlab.veritran.net/appsec/specia && cd specia && ./install.sh
+#   git clone https://gitlab.veritran.net/appsec/vt-spec && cd vt-spec && ./install.sh
 #   ./install.sh --copilot              # install Copilot only
 #   ./install.sh --copilot --skip-build # update Copilot files without rebuilding
 #   ./install.sh --all --skip-build     # update all targets without rebuilding
@@ -115,8 +115,63 @@ echo ""
 # ── 1. Validate repo ─────────────────────────────────────────────────
 if ! grep -q '"@appsec/specia"' "$REPO_DIR/package.json" 2>/dev/null; then
   err "Not a SpecIA repo. Clone it first:"
-  err "  git clone https://gitlab.veritran.net/appsec/specia && cd specia && ./install.sh"
+  err "  git clone https://gitlab.veritran.net/appsec/vt-spec && cd vt-spec && ./install.sh"
   exit 1
+fi
+
+NEW_VERSION="$(node -e "process.stdout.write(require('$REPO_DIR/package.json').version)")"
+
+# ── --update: git pull then reinstall previously configured clients ──
+if $DO_UPDATE; then
+  info "Checking for updates..."
+  CURRENT_VERSION="$NEW_VERSION"
+  OLD_META="$HOME/.specia/install-meta.json"
+
+  # Save old version before pulling
+  if [ -f "$OLD_META" ]; then
+    INSTALLED_VERSION="$(node -e "try{process.stdout.write(require('$OLD_META').version||'')}catch(e){}")"
+  else
+    INSTALLED_VERSION=""
+  fi
+
+  # Git pull
+  if git -C "$REPO_DIR" rev-parse --is-inside-work-tree &>/dev/null; then
+    info "Pulling latest from remote..."
+    git -C "$REPO_DIR" pull --ff-only 2>&1 || {
+      warn "Git pull failed (uncommitted changes or network error). Reinstalling current version."
+    }
+  else
+    warn "Not a git repo — skipping pull. Reinstalling from local files."
+  fi
+
+  NEW_VERSION="$(node -e "process.stdout.write(require('$REPO_DIR/package.json').version)")"
+
+  if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" != "$NEW_VERSION" ]; then
+    echo ""
+    echo -e "${GREEN}  ↑ Updated: ${INSTALLED_VERSION} → ${NEW_VERSION}${NC}"
+  elif [ "$INSTALLED_VERSION" = "$NEW_VERSION" ]; then
+    info "Already up to date (v${NEW_VERSION})"
+  fi
+
+  # Restore previously configured targets from meta
+  if [ -f "$OLD_META" ]; then
+    PREV_TARGETS="$(node -e "
+      try {
+        const m = require('$OLD_META');
+        const t = m.targets || [];
+        process.stdout.write(t.join(' '));
+      } catch(e) {}
+    ")"
+    info "Restoring previously configured targets: ${PREV_TARGETS:-none}"
+    for tgt in $PREV_TARGETS; do
+      case "$tgt" in
+        opencode)    DO_OPENCODE=true; HAS_TARGET_FLAG=true ;;
+        claude-code) DO_CLAUDE_CODE=true; HAS_TARGET_FLAG=true ;;
+        copilot)     DO_COPILOT=true; HAS_TARGET_FLAG=true ;;
+        vscode)      DO_VSCODE=true; HAS_TARGET_FLAG=true ;;
+      esac
+    done
+  fi
 fi
 
 # Check Node.js 20+
@@ -174,7 +229,7 @@ fi
 # Usage: json_merge <file> <node-script>
 # The script receives: configPath, mcpBin, repoDir as globals
 json_merge() {
-  SPECIA_CONFIG_FILE="$1" SPECIA_MCP_BIN="$MCP_BIN" SPECIA_REPO_DIR="$REPO_DIR" node -e "$2"
+  VTSPEC_CONFIG_FILE="$1" VTSPEC_MCP_BIN="$MCP_BIN" VTSPEC_REPO_DIR="$REPO_DIR" node -e "$2"
 }
 
 # ── 3. Auto-detect & configure clients ───────────────────────────────
@@ -189,9 +244,9 @@ if $DO_OPENCODE && [ -d "$OPENCODE_DIR" ]; then
   [ -f "$CONFIG" ] || echo '{}' > "$CONFIG"
   json_merge "$CONFIG" '
     const fs = require("fs");
-    const p = process.env.SPECIA_CONFIG_FILE;
+    const p = process.env.VTSPEC_CONFIG_FILE;
     const c = JSON.parse(fs.readFileSync(p, "utf8"));
-    const orch = process.env.SPECIA_REPO_DIR + "/agents/opencode/specia.json";
+    const orch = process.env.VTSPEC_REPO_DIR + "/agents/opencode/specia.json";
     if (fs.existsSync(orch)) {
       const o = JSON.parse(fs.readFileSync(orch, "utf8"));
       if (!c.agent) c.agent = {};
@@ -205,10 +260,10 @@ if $DO_OPENCODE && [ -d "$OPENCODE_DIR" ]; then
   if $REGISTER_MCP; then
     json_merge "$CONFIG" '
       const fs = require("fs");
-      const p = process.env.SPECIA_CONFIG_FILE;
+      const p = process.env.VTSPEC_CONFIG_FILE;
       const c = JSON.parse(fs.readFileSync(p, "utf8"));
       if (!c.mcp) c.mcp = {};
-      c.mcp.specia = { command: ["node", process.env.SPECIA_MCP_BIN], enabled: true, type: "local" };
+      c.mcp.specia = { command: ["node", process.env.VTSPEC_MCP_BIN], enabled: true, type: "local" };
       fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");
     '
     ok "MCP server registered"
@@ -224,18 +279,9 @@ if $DO_OPENCODE && [ -d "$OPENCODE_DIR" ]; then
   mkdir -p "$OPENCODE_DIR/commands"
   cp "$REPO_DIR/agents/opencode/commands/"*.md "$OPENCODE_DIR/commands/" 2>/dev/null || true
 
-  # Main specia skill
+  # Skill
   mkdir -p "$OPENCODE_DIR/skills/specia"
   [ -f "$REPO_DIR/skills/opencode/specia.md" ] && cp "$REPO_DIR/skills/opencode/specia.md" "$OPENCODE_DIR/skills/specia/SKILL.md"
-
-  # Sub-agent skills referenced by {file:} in specia.json
-  for agent_skill in specia-explore specia-apply; do
-    src="$REPO_DIR/agents/claude-code/agents/${agent_skill}.md"
-    if [ -f "$src" ]; then
-      mkdir -p "$OPENCODE_DIR/skills/$agent_skill"
-      cp "$src" "$OPENCODE_DIR/skills/$agent_skill/SKILL.md"
-    fi
-  done
 
   if $REGISTER_MCP; then
     ok "OpenCode (CLI + Skills + Agent + MCP)"
@@ -258,10 +304,10 @@ if $DO_CLAUDE_CODE && [ -d "$CLAUDE_DIR" ]; then
     [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
     json_merge "$SETTINGS" '
       const fs = require("fs");
-      const p = process.env.SPECIA_CONFIG_FILE;
+      const p = process.env.VTSPEC_CONFIG_FILE;
       const c = JSON.parse(fs.readFileSync(p, "utf8"));
       if (!c.mcpServers) c.mcpServers = {};
-      c.mcpServers.specia = { command: "node", args: [process.env.SPECIA_MCP_BIN] };
+      c.mcpServers.specia = { command: "node", args: [process.env.VTSPEC_MCP_BIN] };
       fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");
     '
     ok "MCP server registered"
@@ -273,13 +319,13 @@ if $DO_CLAUDE_CODE && [ -d "$CLAUDE_DIR" ]; then
   SECTION_FILE="$REPO_DIR/agents/claude-code/CLAUDE.md.section"
   CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
   if [ -f "$SECTION_FILE" ]; then
-    if [ -f "$CLAUDE_MD" ] && grep -q '<!-- BEGIN:specia -->' "$CLAUDE_MD" 2>/dev/null; then
-      SPECIA_CLAUDE_MD="$CLAUDE_MD" SPECIA_SECTION_FILE="$SECTION_FILE" node -e '
+    if [ -f "$CLAUDE_MD" ] && grep -q '<!-- BEGIN:vt-spec -->' "$CLAUDE_MD" 2>/dev/null; then
+      VTSPEC_CLAUDE_MD="$CLAUDE_MD" VTSPEC_SECTION_FILE="$SECTION_FILE" node -e '
         const fs = require("fs");
-        let md = fs.readFileSync(process.env.SPECIA_CLAUDE_MD, "utf8");
-        const sec = fs.readFileSync(process.env.SPECIA_SECTION_FILE, "utf8");
-        md = md.replace(/<!-- BEGIN:specia -->[\s\S]*?<!-- END:specia -->/, sec.trim());
-        fs.writeFileSync(process.env.SPECIA_CLAUDE_MD, md);
+        let md = fs.readFileSync(process.env.VTSPEC_CLAUDE_MD, "utf8");
+        const sec = fs.readFileSync(process.env.VTSPEC_SECTION_FILE, "utf8");
+        md = md.replace(/<!-- BEGIN:vt-spec -->[\s\S]*?<!-- END:vt-spec -->/, sec.trim());
+        fs.writeFileSync(process.env.VTSPEC_CLAUDE_MD, md);
       '
     elif [ -f "$CLAUDE_MD" ]; then
       printf '\n' >> "$CLAUDE_MD"
@@ -294,7 +340,7 @@ if $DO_CLAUDE_CODE && [ -d "$CLAUDE_DIR" ]; then
   cp "$REPO_DIR/agents/claude-code/agents/"*.md "$CLAUDE_DIR/skills/specia/" 2>/dev/null || true
 
   # Skill
-  [ -f "$REPO_DIR/skills/claude-code/SPECIA.md" ] && cp "$REPO_DIR/skills/claude-code/SPECIA.md" "$CLAUDE_DIR/skills/specia/SKILL.md"
+  [ -f "$REPO_DIR/skills/claude-code/VTSPEC.md" ] && cp "$REPO_DIR/skills/claude-code/VTSPEC.md" "$CLAUDE_DIR/skills/specia/SKILL.md"
 
   if $REGISTER_MCP; then
     ok "Claude Code (CLI + Skills + MCP)"
@@ -321,10 +367,10 @@ if $DO_COPILOT && [ -d "$COPILOT_DIR" ]; then
     [ -f "$MCP_CONFIG" ] || echo '{}' > "$MCP_CONFIG"
     json_merge "$MCP_CONFIG" '
       const fs = require("fs");
-      const p = process.env.SPECIA_CONFIG_FILE;
+      const p = process.env.VTSPEC_CONFIG_FILE;
       const c = JSON.parse(fs.readFileSync(p, "utf8"));
       if (!c.mcpServers) c.mcpServers = {};
-      c.mcpServers.specia = { command: "node", args: [process.env.SPECIA_MCP_BIN] };
+      c.mcpServers.specia = { command: "node", args: [process.env.VTSPEC_MCP_BIN] };
       fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");
     '
     ok "MCP server registered"
@@ -336,7 +382,7 @@ if $DO_COPILOT && [ -d "$COPILOT_DIR" ]; then
   mkdir -p "$COPILOT_DIR/skills/specia"
   [ -f "$REPO_DIR/skills/generic/specia.md" ] && cp "$REPO_DIR/skills/generic/specia.md" "$COPILOT_DIR/skills/specia/SKILL.md"
 
-  # SpecIA command skills (specia-init, specia-new, specia-review, specia-audit, etc.)
+  # SpecIA command skills (vt-init, vt-new, vt-review, vt-audit, etc.)
   if [ -d "$REPO_DIR/skills/copilot" ]; then
     for skill_dir in "$REPO_DIR/skills/copilot/"*/; do
       [ -d "$skill_dir" ] || continue
@@ -367,10 +413,10 @@ if $DO_VSCODE && [ -d "$VSCODE_DIR" ]; then
     if [ -f "$MCP_JSON" ]; then
       json_merge "$MCP_JSON" '
         const fs = require("fs");
-        const p = process.env.SPECIA_CONFIG_FILE;
+        const p = process.env.VTSPEC_CONFIG_FILE;
         const c = JSON.parse(fs.readFileSync(p, "utf8"));
         if (!c.servers) c.servers = {};
-        c.servers.specia = { command: "node", args: [process.env.SPECIA_MCP_BIN] };
+        c.servers.specia = { command: "node", args: [process.env.VTSPEC_MCP_BIN] };
         fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");
       '
     else
@@ -383,8 +429,8 @@ if $DO_VSCODE && [ -d "$VSCODE_DIR" ]; then
 
   # Instructions
   mkdir -p "$VSCODE_DIR/prompts"
-  [ -f "$REPO_DIR/agents/vscode/specia.instructions.md" ] && \
-    cp "$REPO_DIR/agents/vscode/specia.instructions.md" "$VSCODE_DIR/prompts/"
+  [ -f "$REPO_DIR/agents/vscode/vt-spec.instructions.md" ] && \
+    cp "$REPO_DIR/agents/vscode/vt-spec.instructions.md" "$VSCODE_DIR/prompts/"
 
   if $REGISTER_MCP; then
     ok "VS Code Copilot (CLI + Instructions + MCP)"
@@ -410,3 +456,52 @@ if [ ${#SKIPPED[@]} -gt 0 ]; then
 fi
 echo ""
 info "Next: restart your AI agent and say 'Initialize SpecIA' in any project."
+
+# ── Write install meta ─────────────────────────────────────────────────
+VTSPEC_META_DIR="$HOME/.specia"
+mkdir -p "$VTSPEC_META_DIR"
+CONFIGURED_JSON="$(printf '%s\n' "${CONFIGURED[@]}" | node -e "
+  const lines=[];
+  const rl=require('readline').createInterface({input:process.stdin});
+  rl.on('line',l=>{if(l)lines.push(l)});
+  rl.on('close',()=>{
+    const tags=lines.map(l=>
+      l.match(/opencode/i)?'opencode':
+      l.match(/claude/i)?'claude-code':
+      l.match(/copilot/i)||l.match(/vscode/i)?'copilot':
+      l.toLowerCase().replace(/\s+/g,'-')
+    );
+    process.stdout.write(JSON.stringify([...new Set(tags)]));
+  });
+" 2>/dev/null || echo '[]')"
+
+node -e "
+  const fs=require('fs');
+  const path='$VTSPEC_META_DIR/install-meta.json';
+  const meta={
+    version:'$NEW_VERSION',
+    repo_dir:'$REPO_DIR',
+    installed_at:new Date().toISOString(),
+    targets:$CONFIGURED_JSON
+  };
+  fs.writeFileSync(path, JSON.stringify(meta, null, 2));
+" 2>/dev/null && ok "Install meta saved (~/.specia/install-meta.json)" || true
+
+# ── What's New banner ──────────────────────────────────────────────────
+CHANGELOG_FILE="$REPO_DIR/../CHANGELOG.md"
+if [ ! -f "$CHANGELOG_FILE" ]; then
+  CHANGELOG_FILE="$REPO_DIR/CHANGELOG.md"
+fi
+
+if [ -f "$CHANGELOG_FILE" ]; then
+  echo ""
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BLUE}  ✨ What's New in v${NEW_VERSION}${NC}"
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  # Extract first changelog section (between first and second ## [)
+  awk '/^## \[/{found++} found==1{print} found==2{exit}' "$CHANGELOG_FILE" | head -30
+  echo ""
+  echo -e "  Full changelog: ${YELLOW}${CHANGELOG_FILE}${NC}"
+  echo -e "  Or run: ${YELLOW}specia changelog${NC}"
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+fi

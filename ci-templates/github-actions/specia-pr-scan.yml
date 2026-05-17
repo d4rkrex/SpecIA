@@ -1,0 +1,189 @@
+# SpecIA PR Security Scanner
+# ────────────────────────────────────────────────────────────────────
+# Automatically scans every PR for security vulnerabilities using
+# specia scan --last-merge (no .specia/ init required).
+#
+# Setup:
+#   1. Copy this file to your repo: .github/workflows/vt-spec-pr-scan.yml
+#   2. (Optional) Set VT_SPEC_FAIL_ON_HIGH=true to block PRs with high findings.
+#   3. Done — every PR gets an automatic security scan.
+#
+# Optional secrets:
+#   VT_SPEC_REPO_URL — Custom SpecIA repo URL (defaults to public SpecIA)
+# ────────────────────────────────────────────────────────────────────
+
+name: SpecIA Security Scan
+
+on:
+  pull_request:
+    branches: ["main", "master", "develop"]
+  push:
+    branches: ["main", "master"]
+
+permissions:
+  contents: read
+  pull-requests: write    # needed to post PR comment
+  issues: write
+
+env:
+  VT_SPEC_FAIL_ON_HIGH: "false"   # set to "true" to block PRs with HIGH findings
+  VT_SPEC_REPO: ${{ secrets.VT_SPEC_REPO_URL || 'https://github.com/d4rkrex/SpecIA.git' }}
+
+jobs:
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # full history — needed for --last-merge and diff
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install SpecIA / SpecIA
+        run: |
+          git clone --depth 1 "$VT_SPEC_REPO" /tmp/specia-install
+          cd /tmp/specia-install/full
+          npm ci --prefer-offline
+          npm run build
+          npm install -g .
+
+      - name: Run security scan on PR diff
+        id: scan
+        run: |
+          # Determine scan target:
+          #   - On PR: use the PR diff (base..head)
+          #   - On push to main: use --last-merge
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            SCAN_FLAGS="--diff ${BASE}..${HEAD}"
+            SCAN_LABEL="PR #${{ github.event.pull_request.number }}"
+          else
+            SCAN_FLAGS="--last-merge"
+            SCAN_LABEL="last merge on ${{ github.ref_name }}"
+          fi
+
+          echo "Scanning: $SCAN_LABEL"
+
+          # Run scan and save JSON result
+          specia scan $SCAN_FLAGS --json > /tmp/scan-result.json 2>&1 || true
+
+          # Extract summary fields
+          POSTURE=$(jq -r '.posture // "UNKNOWN"' /tmp/scan-result.json)
+          FINDINGS=$(jq -r '.findings | length // 0' /tmp/scan-result.json)
+          HIGH=$(jq -r '[.findings[] | select(.severity == "high")] | length' /tmp/scan-result.json 2>/dev/null || echo 0)
+          MEDIUM=$(jq -r '[.findings[] | select(.severity == "medium")] | length' /tmp/scan-result.json 2>/dev/null || echo 0)
+          LOW=$(jq -r '[.findings[] | select(.severity == "low")] | length' /tmp/scan-result.json 2>/dev/null || echo 0)
+
+          echo "posture=$POSTURE" >> "$GITHUB_OUTPUT"
+          echo "findings=$FINDINGS" >> "$GITHUB_OUTPUT"
+          echo "high=$HIGH" >> "$GITHUB_OUTPUT"
+          echo "medium=$MEDIUM" >> "$GITHUB_OUTPUT"
+          echo "low=$LOW" >> "$GITHUB_OUTPUT"
+          echo "scan_label=$SCAN_LABEL" >> "$GITHUB_OUTPUT"
+
+          cat /tmp/scan-result.json
+
+      - name: Generate human-readable scan report
+        id: report
+        run: |
+          POSTURE="${{ steps.scan.outputs.posture }}"
+          FINDINGS="${{ steps.scan.outputs.findings }}"
+          HIGH="${{ steps.scan.outputs.high }}"
+          MEDIUM="${{ steps.scan.outputs.medium }}"
+          LOW="${{ steps.scan.outputs.low }}"
+          SCAN_LABEL="${{ steps.scan.outputs.scan_label }}"
+
+          # Posture emoji
+          case "$POSTURE" in
+            GOOD)         POSTURE_ICON="🟢" ;;
+            FAIR)         POSTURE_ICON="🟡" ;;
+            NEEDS_ATTENTION) POSTURE_ICON="🔴" ;;
+            *)            POSTURE_ICON="⚪" ;;
+          esac
+
+          # Build markdown comment
+          cat > /tmp/scan-comment.md <<EOF
+          ## $POSTURE_ICON SpecIA Security Scan — \`$POSTURE\`
+
+          Scanned: **$SCAN_LABEL**
+
+          | Severity | Count |
+          |----------|-------|
+          | 🔴 High  | $HIGH |
+          | 🟡 Medium | $MEDIUM |
+          | 🟢 Low   | $LOW |
+          | **Total** | **$FINDINGS** |
+
+          EOF
+
+          # Append top findings (up to 5)
+          if [ "$FINDINGS" -gt 0 ]; then
+            echo "### Top Findings" >> /tmp/scan-comment.md
+            jq -r '.findings[:5][] | "- **[\(.severity | ascii_upcase)]** \(.title // .description // "Finding") — \(.owasp // "")"' \
+              /tmp/scan-result.json >> /tmp/scan-comment.md 2>/dev/null || true
+            if [ "$FINDINGS" -gt 5 ]; then
+              echo "" >> /tmp/scan-comment.md
+              echo "_...and $((FINDINGS - 5)) more. Run \`specia scan --last-merge\` locally for full report._" >> /tmp/scan-comment.md
+            fi
+          else
+            echo "_No security findings detected in this diff._" >> /tmp/scan-comment.md
+          fi
+
+          echo "" >> /tmp/scan-comment.md
+          echo "<details><summary>Run locally</summary>" >> /tmp/scan-comment.md
+          echo "" >> /tmp/scan-comment.md
+          echo "\`\`\`bash" >> /tmp/scan-comment.md
+          echo "specia scan --last-merge       # scan last merge" >> /tmp/scan-comment.md
+          echo "specia debate --last-merge     # debate findings" >> /tmp/scan-comment.md
+          echo "\`\`\`" >> /tmp/scan-comment.md
+          echo "</details>" >> /tmp/scan-comment.md
+
+          # Save for upload
+          cp /tmp/scan-comment.md "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('/tmp/scan-comment.md', 'utf8');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            // Update existing comment if present, otherwise create new
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.data.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.includes('SpecIA Security Scan')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vt-spec-scan-${{ github.run_number }}
+          path: /tmp/scan-result.json
+          retention-days: 30
+
+      - name: Fail on HIGH findings (optional)
+        if: env.VT_SPEC_FAIL_ON_HIGH == 'true'
+        run: |
+          HIGH="${{ steps.scan.outputs.high }}"
+          if [ "$HIGH" -gt 0 ]; then
+            echo "❌ Found $HIGH HIGH severity issue(s). Set VT_SPEC_FAIL_ON_HIGH=false to allow."
+            exit 1
+          fi
+          echo "✓ No HIGH severity issues found."

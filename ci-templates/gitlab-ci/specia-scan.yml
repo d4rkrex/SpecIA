@@ -1,0 +1,90 @@
+# SpecIA PR Security Scanner — GitLab CI
+# ────────────────────────────────────────────────────────────────────
+# Automatically scans every MR for security vulnerabilities using
+# specia scan --last-merge (no .specia/ init required).
+#
+# Setup:
+#   1. Add this to your .gitlab-ci.yml (or include it):
+#        include:
+#          - local: .gitlab/ci/vt-spec-scan.yml
+#
+#   2. (Optional) Set CI variable VT_SPEC_FAIL_ON_HIGH=true to block MRs.
+#   3. Done — every MR gets an automatic security scan.
+# ────────────────────────────────────────────────────────────────────
+
+stages:
+  - security
+
+specia-security-scan:
+  stage: security
+  image: node:20-alpine
+  variables:
+    VT_SPEC_FAIL_ON_HIGH: "false"
+    VT_SPEC_REPO: "https://github.com/d4rkrex/SpecIA.git"
+    GIT_DEPTH: 0                  # full clone — needed for diff and --last-merge
+    GIT_STRATEGY: fetch
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+  before_script:
+    - apk add --no-cache git jq curl
+    - git clone --depth 1 "$VT_SPEC_REPO" /tmp/specia-install
+    - cd /tmp/specia-install/full
+    - npm ci --prefer-offline
+    - npm run build
+    - npm install -g .
+    - cd "$CI_PROJECT_DIR"
+
+  script:
+    # Determine scan target
+    - |
+      if [ -n "$CI_MERGE_REQUEST_IID" ]; then
+        BASE="$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+        HEAD="$CI_COMMIT_SHA"
+        SCAN_FLAGS="--diff ${BASE}..${HEAD}"
+        SCAN_LABEL="MR !$CI_MERGE_REQUEST_IID"
+      else
+        SCAN_FLAGS="--last-merge"
+        SCAN_LABEL="last merge on $CI_COMMIT_BRANCH"
+      fi
+
+      echo "Scanning: $SCAN_LABEL"
+
+    # Run scan
+    - specia scan $SCAN_FLAGS --json > /tmp/scan-result.json 2>&1 || true
+    - cat /tmp/scan-result.json
+
+    # Extract summary
+    - |
+      POSTURE=$(jq -r '.posture // "UNKNOWN"' /tmp/scan-result.json)
+      FINDINGS=$(jq '.findings | length' /tmp/scan-result.json 2>/dev/null || echo 0)
+      HIGH=$(jq '[.findings[] | select(.severity == "high")] | length' /tmp/scan-result.json 2>/dev/null || echo 0)
+      MEDIUM=$(jq '[.findings[] | select(.severity == "medium")] | length' /tmp/scan-result.json 2>/dev/null || echo 0)
+      LOW=$(jq '[.findings[] | select(.severity == "low")] | length' /tmp/scan-result.json 2>/dev/null || echo 0)
+
+      echo "POSTURE: $POSTURE"
+      echo "Findings: $FINDINGS (high=$HIGH medium=$MEDIUM low=$LOW)"
+
+      # Fail gate
+      if [ "$VT_SPEC_FAIL_ON_HIGH" = "true" ] && [ "$HIGH" -gt 0 ]; then
+        echo "❌ Found $HIGH HIGH severity issue(s). Failing pipeline."
+        exit 1
+      fi
+
+      echo "✓ Scan complete. Posture: $POSTURE"
+
+  artifacts:
+    name: vt-spec-scan-$CI_PIPELINE_ID
+    paths:
+      - /tmp/scan-result.json
+    reports:
+      # Expose as GitLab security report (SAST format)
+      # Note: specia scan --json output does not natively match SAST schema.
+      # For native SAST integration, post-process with jq to map fields.
+      dotenv: /dev/null
+    expire_in: 30 days
+    when: always
+
+  allow_failure: true    # set to false once scan is stable

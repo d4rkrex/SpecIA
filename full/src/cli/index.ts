@@ -28,6 +28,7 @@ import { registerSkillsCommand } from "./commands/skills.js";
 import { registerFleetCommand } from "./commands/fleet.js";
 import { registerUpdateCommand } from "./commands/update.js";
 import { registerChangelogCommand } from "./commands/changelog.js";
+import { registerDoctorCommand } from "./commands/doctor.js";
 import { BakeService } from "../services/bake.js";
 // import { registerDebateCommand } from "./commands/debate.js";
 
@@ -70,6 +71,7 @@ registerSkillsCommand(program);
 registerFleetCommand(program);
 registerUpdateCommand(program);
 registerChangelogCommand(program);
+registerDoctorCommand(program);
 // registerDebateCommand(program);
 
 // Handle @shortcut syntax before parsing

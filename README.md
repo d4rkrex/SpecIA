@@ -5,7 +5,7 @@
 [![MCP Protocol](https://img.shields.io/badge/protocol-MCP%20optional-lightgrey)](https://modelcontextprotocol.io)
 [![Tests](https://img.shields.io/badge/tests-812_passing-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.5.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.6.0-blue)](CHANGELOG.md)
 
 **Security-aware spec-driven development for AI agents.**
 
@@ -14,8 +14,8 @@ SpecIA covers the full spectrum — from a 15-second PR scan to a complete compl
 | Mode | Command | Use Case | Cost |
 |------|---------|----------|------|
 | **Quick scan** | `specia scan --last-merge` | PR review, zero setup | ~$0.01 |
-| **Lite review** | `specia-review-lite` skill | Quick STRIDE check, no Node needed | ~$0.009 |
-| **Lite audit** | `specia-audit-lite` skill | Static post-impl check | ~$0.020 |
+| **Lite review** | `vt-review-lite` skill | Quick STRIDE check, no Node needed | ~$0.009 |
+| **Lite audit** | `vt-audit-lite` skill | Static post-impl check | ~$0.020 |
 | **Full workflow** | `specia new` → … → `specia done` | Release gate, compliance | ~$0.35 |
 
 ---
@@ -23,14 +23,14 @@ SpecIA covers the full spectrum — from a 15-second PR scan to a complete compl
 ## Installation
 
 ```bash
-git clone https://github.com/d4rkrex/SpecIA.git
-cd vt-spec/full
+git clone https://gitlab.veritran.net/appsec/specia.git
+cd specia/full
 ./install.sh
 ```
 
 Installs the `specia` CLI binary plus all skills/agents for your AI editor (Copilot CLI, Claude Code, OpenCode, or VS Code).
 
-> **No Node.js?** Copy `full/skills/copilot/specia-review-lite/SKILL.md` or `specia-audit-lite/SKILL.md` directly into your AI editor's skills folder — no build required.
+> **No Node.js?** Copy `full/skills/copilot/vt-review-lite/SKILL.md` or `vt-audit-lite/SKILL.md` directly into your AI editor's skills folder — no build required.
 
 To enable the optional MCP server:
 ```bash
@@ -47,16 +47,32 @@ See [full/README.md](full/README.md) for detailed setup.
 
 ```bash
 cd your-project
-specia scan --last-merge
+specia scan --last-merge          # scan last merged PR in this repo
+specia scan --pr <url>            # fetch + scan a GitHub PR or GitLab MR by URL
+specia scan --diff main..HEAD     # scan any diff range
 ```
 
-Scans the last merged PR, auto-calls Claude/GPT if an API key is set, saves results to `/tmp/specia-scans/`.
+Scans auto-call Claude/GPT if an API key is set, save results to `/tmp/specia-scans/`, and store findings to Alejandría memory if available.
+
+Add a `.speciaignore` file in your project root to exclude lock files, generated code, etc.:
+```
+*.lock
+dist/**
+node_modules/**
+```
+
+### Security analytics
+
+```bash
+specia history           # weekly findings trend (last 90 days)
+specia history --since 30d --format json
+```
 
 ### Lightweight skill review (no Node required)
 
 Ask your AI agent:
 ```
-Run specia-review-lite on oauth-spec.md
+Run vt-review-lite on oauth-spec.md
 ```
 
 Returns a BLOCK/WARN/PASS recommendation in ~15 seconds.
@@ -72,7 +88,7 @@ specia new add-oauth-login
 
 # Follow the workflow
 specia continue  # Runs: propose → spec → review → tasks
-specia apply     # Implements code (via specia-apply agent)
+specia apply     # Implements code (via vt-apply agent)
 specia audit     # Verifies implementation
 specia done      # Archives change
 ```
@@ -84,10 +100,10 @@ See [full/README.md](full/README.md) for detailed documentation.
 ## Repository Structure
 
 ```
-vt-spec/
+specia/
 ├── full/                      # SpecIA (CLI + MCP server + all skills)
 │   ├── agents/               # Copilot, Claude Code, OpenCode agents
-│   ├── skills/               # All skills (includes specia-review-lite, specia-audit-lite)
+│   ├── skills/               # All skills (includes vt-review-lite, vt-audit-lite)
 │   ├── src/                  # TypeScript CLI + MCP server
 │   ├── test/                 # 812 tests
 │   └── install.sh            # Installer
@@ -131,11 +147,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Support
 
-- **Issues**: [GitLab Issues](https://github.com/d4rkrex/SpecIA/-/issues)
-- **Discussions**: [GitLab Discussions](https://github.com/d4rkrex/SpecIA/-/discussions)
+- **Issues**: [GitLab Issues](https://gitlab.veritran.net/appsec/specia/-/issues)
+- **Discussions**: [GitLab Discussions](https://gitlab.veritran.net/appsec/specia/-/discussions)
 
 ---
 
 ## Version
 
-Current: **v2.5.0** — See [CHANGELOG.md](CHANGELOG.md) for release history.
+Current: **v2.6.0** — See [CHANGELOG.md](CHANGELOG.md) for release history.

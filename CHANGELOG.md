@@ -2,6 +2,42 @@
 
 All notable changes to SpecIA will be documented in this file.
 
+## [2.6.0] — 2026-05-30
+
+### 🧠 Alejandría Memory Integration
+
+- **Scan → memory**: `specia scan` now stores findings summaries to Alejandría after each run. Subsequent scans auto-recall prior context via `buildScanHint()`.
+- **Debate → memory**: `specia debate` stores debate results (threat IDs, severity breakdown, consensus) to Alejandría for cross-session continuity.
+- **`buildScanHint()` / `buildDebateHint()`** — New helpers in `memory-ops.ts` that format rich recall prompts for re-injection into scan/debate context windows.
+- **Graceful degradation** — Memory ops use `tryStore()` / `tryRecall()`: silent no-op when Alejandría is not running. No user-facing errors.
+
+### 📋 Security Findings History
+
+- **`specia history`** — New command: queries `~/.local/share/specia/analytics.db` and shows a weekly findings trend with ASCII bar chart (█ / ░).
+- **`--since <duration>`** — Filter by time window (`7d`, `30d`, `90d`). Default: 90d.
+- **`--format json`** — Machine-readable output of weekly buckets and severity counts.
+- **Severity breakdown** — Chart annotates CRITICAL / HIGH / MEDIUM / LOW counts per period.
+
+### 🔗 PR/MR Diff Fetching
+
+- **`specia scan --pr <url>`** — Fetch and scan a GitHub PR or GitLab MR directly from its URL without cloning. Supports:
+  - GitHub: `https://github.com/owner/repo/pull/123` (via `application/vnd.github.v3.diff` header)
+  - GitLab: `https://gitlab.host/group/repo/-/merge_requests/456` (via `/api/v4/projects/.../merge_requests/{N}/changes`)
+- **Auth**: uses `GITHUB_TOKEN` / `GITLAB_TOKEN` env vars if available.
+
+### 🚫 .speciaignore
+
+- **`.speciaignore` file** — Place in project root to exclude files/paths from diff analysis. Glob syntax, one pattern per line. Comments with `#`.
+- Applied automatically to `scan`, `debate`, and `scan --pr` diffs before analysis.
+- Standard glob patterns: `*.lock`, `dist/**`, `node_modules/**`, etc.
+
+### 🤖 Skills + Agents Memory Guidance
+
+- **`vt-scan` skill** — Memory Integration section: how to call `buildScanHint()` and store results.
+- **`vt-debate` skill** — Memory Integration section: recall prior debate context.
+- **`vt-explore` skill** — Stronger recall guidance: always call `mem_recall` before exploring.
+- **`CLAUDE.md.section`** — Alejandría routing note: scan/debate memory ops are automatic via `memory-ops.ts`.
+
 ## [2.5.0] — 2026-05-17
 
 ### 🚀 Fleet Orchestrator — Intelligent Parallel Apply
@@ -9,8 +45,8 @@ All notable changes to SpecIA will be documented in this file.
 - **`FleetRecommendation`** — New type in `apply-manifest.yaml`: `{ mode, score, reasons }`. Score 0–100 determines whether fan-out apply is worth the overhead.
 - **`computeFleetRecommendation()`** — Scoring algorithm: +40 multi-group, +20 substantive groups (≥2 tasks each), +20 total tasks ≥6, +20 clean file ownership; −50 restricted paths in scope, −30 security keyword in change name. Threshold: score ≥ 60 → `fleet`.
 - **`specia fleet check <change>`** — New CLI command: shows fleet recommendation, score bar, and reasons. `--json` flag for structured output.
-- **`specia-fleet` Copilot skill + Claude Code agent** — Orchestrates parallel vt-apply workers with security constraints.
-- **Apply phase routing** — `CLAUDE.md.section` checks `fleet_recommendation.mode` before delegating to specia-fleet or vt-apply.
+- **`vt-fleet` Copilot skill + Claude Code agent** — Orchestrates parallel vt-apply workers with security constraints.
+- **Apply phase routing** — `CLAUDE.md.section` checks `fleet_recommendation.mode` before delegating to vt-fleet or vt-apply.
 - **`vt-verify` hardened** — tasks_hash integrity check added as check #0. Aborts with `MANIFEST_TAMPERED` on hash mismatch.
 
 ### 🔄 Update Mechanism
@@ -54,12 +90,12 @@ All notable changes to SpecIA will be documented in this file.
 - **Claude Code agents**: vt-scan.md, vt-debate.md, vt-doctor.md, vt-report.md (all new)
 - **CLAUDE.md orchestrator**: "Ad-hoc Security Commands" routing table — scan/debate/doctor/report now routed to sub-agents automatically
 - **All new commands in `specia --list`** — Scan, debate, doctor, report, fleet, update, changelog, skills now appear in the command list
-- **`specia-review-lite` + `specia-audit-lite`** — Lightweight skills (no Node required) consolidated into `full/skills/copilot/`; installed automatically by `./install.sh --copilot`
+- **`vt-review-lite` + `vt-audit-lite`** — Lightweight skills (no Node required) consolidated into `full/skills/copilot/`; installed automatically by `./install.sh --copilot`
 
 ### 🔧 CI/CD Templates
 
-- **`ci-templates/github-actions/vt-spec-pr-scan.yml`** — GitHub Actions workflow: scans every PR, posts comment with severity breakdown (🔴🟡🟢), optional `VT_SPEC_FAIL_ON_HIGH` gate, 30-day artifact retention.
-- **`ci-templates/gitlab-ci/vt-spec-scan.yml`** — GitLab CI equivalent.
+- **`ci-templates/github-actions/specia-pr-scan.yml`** — GitHub Actions workflow: scans every PR, posts comment with severity breakdown (🔴🟡🟢), optional `SPECIA_FAIL_ON_HIGH` gate, 30-day artifact retention.
+- **`ci-templates/gitlab-ci/specia-scan.yml`** — GitLab CI equivalent.
 - **Zero setup** — Copy the template, commit, and every PR gets automatic security scanning.
 
 ---
@@ -149,18 +185,18 @@ All notable changes to SpecIA will be documented in this file.
 
 - **Monorepo Restructure** — SpecIA is now a monorepo with two editions:
   - **SpecIA Full** (`full/`) — Complete workflow with MCP server, CLI, 7 workflow phases, dynamic testing, abuse case verification, and compliance-grade audit trails. For release gates, compliance requirements, and high-security features.
-  - **SpecIA Lite** (`lite/`) — Lightweight alternative with 2 OpenCode skills (`specia-review-lite`, `specia-audit-lite`), no MCP server, optimized for speed and cost. For PR reviews, quick checks, and early development.
+  - **SpecIA Lite** (`lite/`) — Lightweight alternative with 2 OpenCode skills (`vt-review-lite`, `vt-audit-lite`), no MCP server, optimized for speed and cost. For PR reviews, quick checks, and early development.
 - **Hybrid Setup Support** — Both editions can coexist in the same environment. Use Lite for 80% of features, Full for 20% critical paths → **73% cost savings** vs Full-only.
 
 ### ✨ SpecIA Lite Features (NEW)
 
-- **`specia-review-lite` skill** — Quick STRIDE security review focusing on critical/high threats only
+- **`vt-review-lite` skill** — Quick STRIDE security review focusing on critical/high threats only
   - Token budget: ~3.5k total (~$0.009 per review)
   - Time: ~15 seconds (5x faster than Full)
   - Output: Max 10 threats, max 500 tokens
   - Watermark: `🚀 SpecIA LITE Review | ~15s | ~$0.009 | Critical/High Only`
   - NO abuse cases, NO DREAD scoring, NO audit trail
-- **`specia-audit-lite` skill** — Quick static audit verifying spec compliance and security gaps
+- **`vt-audit-lite` skill** — Quick static audit verifying spec compliance and security gaps
   - Token budget: ~5.8k total (~$0.020 per audit)
   - Time: ~30 seconds
   - Checks: Test file existence (grep), security gap fixes (grep), spec requirement coverage (basic)

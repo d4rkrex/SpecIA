@@ -27,6 +27,8 @@ import {
   resolveJsonInput,
   tryStdinJson,
 } from "../output.js";
+import { tryStore } from "../../services/memory-ops.js";
+import { FileStore } from "../../services/store.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -39,6 +41,46 @@ function resolveVtspecRoot(): string | null {
     dir = parent;
   }
   return null;
+}
+
+// ── Ignore helpers (shared with scan) ────────────────────────────────
+
+/** Load ignore patterns from .speciaignore in cwd. */
+function loadIgnorePatterns(cwd: string): string[] {
+  const patterns: string[] = [];
+  const p = path.join(cwd, ".speciaignore");
+  if (fs.existsSync(p)) {
+    const lines = fs.readFileSync(p, "utf-8").split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("#")) {
+        patterns.push(trimmed);
+      }
+    }
+  }
+  return patterns;
+}
+
+function globToRegex(glob: string): RegExp {
+  const escaped = glob
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "§DOUBLE§")
+    .replace(/\*/g, "[^/]*")
+    .replace(/§DOUBLE§/g, ".*")
+    .replace(/\?/g, "[^/]");
+  return new RegExp(`(^|/)${escaped}(/|$)`);
+}
+
+function filterDiff(diff: string, ignorePatterns: string[]): string {
+  if (ignorePatterns.length === 0) return diff;
+  const regexes = ignorePatterns.filter((p) => !p.startsWith("!")).map(globToRegex);
+  const chunks = diff.split(/(?=^diff --git )/m);
+  const kept = chunks.filter((chunk) => {
+    const match = chunk.match(/^diff --git a\/(.*) b\//m);
+    if (!match) return true;
+    return !regexes.some((re) => re.test(match[1] ?? ""));
+  });
+  return kept.join("");
 }
 
 /** Reuse the same last-merge detection as scan. */
@@ -325,6 +367,17 @@ export function registerDebateCommand(program: Command): void {
           return;
         }
 
+        // Apply .speciaignore filtering
+        const ignorePatterns = loadIgnorePatterns(process.cwd());
+        if (ignorePatterns.length > 0 && code) {
+          const filtered = filterDiff(code, ignorePatterns);
+          const removedCount = (code.split(/(?=^diff --git )/m).length - filtered.split(/(?=^diff --git )/m).length);
+          if (removedCount > 0 && !isJsonMode()) {
+            dim(`  .speciaignore: excluded ${removedCount} file(s) from debate`);
+          }
+          code = filtered;
+        }
+
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
         const debateId = `${timestamp}-debate`;
 
@@ -332,12 +385,12 @@ export function registerDebateCommand(program: Command): void {
         if (opts.result !== undefined) {
           const resolved = await resolveJsonInput(opts.result, "debate result");
           if (!resolved.ok) { error(resolved.error); process.exitCode = 1; return; }
-          return submitStandaloneDebateResult(resolved.json, debateId, description, speciaRoot);
+          return await submitStandaloneDebateResult(resolved.json, debateId, description, speciaRoot);
         }
 
         const stdinJson = await tryStdinJson();
         if (stdinJson !== null) {
-          return submitStandaloneDebateResult(stdinJson, debateId, description, speciaRoot);
+          return await submitStandaloneDebateResult(stdinJson, debateId, description, speciaRoot);
         }
 
         // Phase 1: generate prompt
@@ -355,7 +408,7 @@ export function registerDebateCommand(program: Command): void {
                 )
             );
             const ts2 = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-            return submitStandaloneDebateResult(llmResult.result, `${ts2}-debate`, description, speciaRoot);
+            return await submitStandaloneDebateResult(llmResult.result, `${ts2}-debate`, description, speciaRoot);
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             error(`LLM call failed: ${msg}`);
@@ -404,11 +457,11 @@ export function registerDebateCommand(program: Command): void {
       if (opts.result !== undefined) {
         const resolved = await resolveJsonInput(opts.result, "debate result");
         if (!resolved.ok) { error(resolved.error); process.exitCode = 1; return; }
-        return submitDebateResult(resolved.json, changeName, speciaRoot);
+        return await submitDebateResult(resolved.json, changeName, speciaRoot);
       }
 
       const stdinJson = await tryStdinJson();
-      if (stdinJson !== null) return submitDebateResult(stdinJson, changeName, speciaRoot);
+      if (stdinJson !== null) return await submitDebateResult(stdinJson, changeName, speciaRoot);
 
       // Phase 1: generate prompt
       const prompt = buildDebatePrompt(changeName, reviewContent);
@@ -424,7 +477,7 @@ export function registerDebateCommand(program: Command): void {
                 llmClientB.complete("You are a senior application security engineer and debate facilitator.", prompt)
               )
           );
-          return submitDebateResult(llmResult.result, changeName, speciaRoot);
+          return await submitDebateResult(llmResult.result, changeName, speciaRoot);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           error(`LLM call failed: ${msg}`);
@@ -445,7 +498,7 @@ export function registerDebateCommand(program: Command): void {
     });
 }
 
-function submitDebateResult(raw: unknown, changeName: string, speciaRoot: string): void {
+async function submitDebateResult(raw: unknown, changeName: string, speciaRoot: string): Promise<void> {
   try {
     const result = parseDebateResult(raw);
     const markdown = renderDebateMarkdown(changeName, result);
@@ -454,6 +507,31 @@ function submitDebateResult(raw: unknown, changeName: string, speciaRoot: string
     fs.mkdirSync(changeDir, { recursive: true });
     const debatePath = path.join(changeDir, "debate.md");
     fs.writeFileSync(debatePath, markdown, "utf-8");
+
+    // Opportunistically store to Alejandría
+    try {
+      const store = new FileStore(speciaRoot);
+      if (store.isInitialized()) {
+        const config = store.readConfig();
+        if (config.memory.backend === "alejandria") {
+          const memContent = [
+            `Security debate: change "${changeName}"`,
+            `Findings debated: ${result.findings_debated}`,
+            `Validated: ${result.summary.validated} | Escalated: ${result.summary.escalated} | De-escalated: ${result.summary.de_escalated}`,
+            result.summary.needs_human_review.length > 0
+              ? `Needs human review: ${result.summary.needs_human_review.join(", ")}`
+              : "",
+          ].filter(Boolean).join("\n");
+          await tryStore(config.memory, memContent, {
+            topic_key: `specia/debate/${changeName}`,
+            topic: "security-debate",
+            importance: "high",
+          });
+        }
+      }
+    } catch {
+      // Silent — Alejandría is best-effort, never blocks debate output
+    }
 
     if (isJsonMode()) {
       jsonOutput({
@@ -478,12 +556,12 @@ function submitDebateResult(raw: unknown, changeName: string, speciaRoot: string
   }
 }
 
-function submitStandaloneDebateResult(
+async function submitStandaloneDebateResult(
   raw: unknown,
   debateId: string,
   source: string,
   speciaRoot: string | null,
-): void {
+): Promise<void> {
   try {
     const result = parseDebateResult(raw);
     const markdown = renderDebateMarkdown(source, result);
@@ -495,6 +573,33 @@ function submitStandaloneDebateResult(
     fs.mkdirSync(saveDir, { recursive: true });
     const reportPath = path.join(saveDir, `${debateId}.md`);
     fs.writeFileSync(reportPath, markdown, "utf-8");
+
+    // Opportunistically store to Alejandría (only when in a specia project)
+    if (speciaRoot) {
+      try {
+        const store = new FileStore(speciaRoot);
+        if (store.isInitialized()) {
+          const config = store.readConfig();
+          if (config.memory.backend === "alejandria") {
+            const memContent = [
+              `Security scan+debate: ${source} (${debateId})`,
+              `Findings debated: ${result.findings_debated}`,
+              `Validated: ${result.summary.validated} | Escalated: ${result.summary.escalated} | De-escalated: ${result.summary.de_escalated}`,
+              result.summary.needs_human_review.length > 0
+                ? `Needs human review: ${result.summary.needs_human_review.join(", ")}`
+                : "",
+            ].filter(Boolean).join("\n");
+            await tryStore(config.memory, memContent, {
+              topic_key: `specia/debate/${debateId}`,
+              topic: "security-debate",
+              importance: "high",
+            });
+          }
+        }
+      } catch {
+        // Silent — Alejandría is best-effort, never blocks debate output
+      }
+    }
 
     if (isJsonMode()) {
       jsonOutput({ status: "success", source, debate_path: reportPath,

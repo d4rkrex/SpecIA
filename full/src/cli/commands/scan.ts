@@ -26,6 +26,8 @@ import {
   tryStdinJson,
   table,
 } from "../output.js";
+import { tryStore } from "../../services/memory-ops.js";
+import { FileStore } from "../../services/store.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -111,6 +113,109 @@ function collectFileCode(filePaths: string[]): string {
     parts.push(`\n\`\`\`\n// File: ${fp}\n${content}\n\`\`\``);
   }
   return parts.join("\n");
+}
+
+/** Load ignore patterns from .speciaignore in cwd. */
+function loadIgnorePatterns(cwd: string): string[] {
+  const patterns: string[] = [];
+  for (const fname of [".speciaignore"]) {
+    const p = path.join(cwd, fname);
+    if (fs.existsSync(p)) {
+      const lines = fs.readFileSync(p, "utf-8").split("\n");
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#")) {
+          patterns.push(trimmed);
+        }
+      }
+    }
+  }
+  return patterns;
+}
+
+/** Convert a glob pattern to a RegExp for path matching. */
+function globToRegex(glob: string): RegExp {
+  const escaped = glob
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "§DOUBLE§")
+    .replace(/\*/g, "[^/]*")
+    .replace(/§DOUBLE§/g, ".*")
+    .replace(/\?/g, "[^/]");
+  return new RegExp(`(^|/)${escaped}(/|$)`);
+}
+
+/**
+ * Filter diff content, removing hunks for files matching ignore patterns.
+ * Splits on "diff --git" boundaries and removes matching file sections.
+ */
+function filterDiff(diff: string, ignorePatterns: string[]): string {
+  if (ignorePatterns.length === 0) return diff;
+  const regexes = ignorePatterns
+    .filter((p) => !p.startsWith("!"))
+    .map(globToRegex);
+
+  const chunks = diff.split(/(?=^diff --git )/m);
+  const kept = chunks.filter((chunk) => {
+    const match = chunk.match(/^diff --git a\/(.*) b\//m);
+    if (!match) return true;
+    const filePath = match[1];
+    return !regexes.some((re) => re.test(filePath ?? ""));
+  });
+  return kept.join("");
+}
+
+/** Parse a GitHub or GitLab PR/MR URL and fetch the diff. */
+async function fetchPrDiff(prUrl: string): Promise<{ diff: string; description: string }> {
+  let apiUrl: string;
+  let headers: Record<string, string> = { "Accept": "application/vnd.github.v3.diff" };
+  let description = prUrl;
+  let isGitLab = false;
+
+  // GitHub: https://github.com/owner/repo/pull/123
+  const ghMatch = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+  if (ghMatch) {
+    const [, owner, repo, number] = ghMatch;
+    apiUrl = `https://api.github.com/repos/${owner}/${repo}/pulls/${number}`;
+    description = `GitHub PR #${number} (${owner}/${repo})`;
+    if (process.env["GITHUB_TOKEN"]) {
+      headers["Authorization"] = `Bearer ${process.env["GITHUB_TOKEN"]}`;
+    }
+    headers["User-Agent"] = "specia/2.6";
+  } else {
+    // GitLab: https://gitlab.xxx/namespace/repo/-/merge_requests/123
+    const glMatch = prUrl.match(/^(https?:\/\/[^/]+)\/(.+?)\/-\/merge_requests\/(\d+)/);
+    if (!glMatch) {
+      throw new Error(`Unsupported PR URL format. Expected GitHub (github.com/owner/repo/pull/N) or GitLab (gitlab.xxx/ns/repo/-/merge_requests/N)`);
+    }
+    const [, baseUrl, projectPath, number] = glMatch;
+    const encodedPath = encodeURIComponent(projectPath ?? "");
+    apiUrl = `${baseUrl}/api/v4/projects/${encodedPath}/merge_requests/${number}/changes`;
+    description = `GitLab MR !${number} (${projectPath})`;
+    isGitLab = true;
+    headers = { "Content-Type": "application/json" };
+    if (process.env["GITLAB_TOKEN"]) {
+      headers["Authorization"] = `Bearer ${process.env["GITLAB_TOKEN"]}`;
+    } else if (process.env["CI_JOB_TOKEN"]) {
+      headers["JOB-TOKEN"] = process.env["CI_JOB_TOKEN"];
+    }
+  }
+
+  const response = await fetch(apiUrl, { headers });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch PR diff (HTTP ${response.status}): ${await response.text().then(t => t.slice(0, 200))}`);
+  }
+
+  if (isGitLab) {
+    const data = await response.json() as { changes?: Array<{ diff: string; new_path: string; old_path: string }> };
+    const changes = data.changes ?? [];
+    const diff = changes
+      .map((c) => `diff --git a/${c.old_path} b/${c.new_path}\n${c.diff}`)
+      .join("\n");
+    return { diff, description };
+  } else {
+    const diff = await response.text();
+    return { diff, description };
+  }
 }
 
 function buildScanPrompt(code: string, posture: string): string {
@@ -237,6 +342,7 @@ export function registerScanCommand(program: Command): void {
     .option("--last-merge", "Scan the last merged PR/MR (most common use case)")
     .option("--diff <ref>", "Scan diff vs a git ref (e.g. HEAD~1, main, origin/main)")
     .option("--files <paths>", "Comma-separated list of files to scan")
+    .option("--pr <url>", "fetch diff from a GitHub PR or GitLab MR URL")
     .option("--posture <posture>", "Security posture: standard|elevated|paranoid", "standard")
     .option("--manual", "Print prompt to stdout (skip LLM even if API key is set)")
     .option("--api", "Call LLM API directly (auto-detects ANTHROPIC_API_KEY / OPENAI_API_KEY)")
@@ -247,6 +353,7 @@ export function registerScanCommand(program: Command): void {
       lastMerge?: boolean;
       diff?: string;
       files?: string;
+      pr?: string;
       posture?: string;
       manual?: boolean;
       api?: boolean;
@@ -264,7 +371,20 @@ export function registerScanCommand(program: Command): void {
       let source = "staged";
       let sourceDescription = "";
 
-      if (opts.lastMerge) {
+      // --pr: fetch diff from GitHub PR or GitLab MR
+      if (opts.pr) {
+        try {
+          if (!isJsonMode()) info(`Fetching PR diff from ${opts.pr}…`);
+          const { diff, description: prDesc } = await fetchPrDiff(opts.pr);
+          code = diff;
+          source = "pr";
+          sourceDescription = prDesc;
+        } catch (e) {
+          error(`Could not fetch PR diff: ${e instanceof Error ? e.message : String(e)}`);
+          process.exitCode = 1;
+          return;
+        }
+      } else if (opts.lastMerge) {
         const result = collectLastMergeDiff();
         code = result.code;
         source = "last-merge";
@@ -290,9 +410,20 @@ export function registerScanCommand(program: Command): void {
         source = "staged";
       }
 
-      if (!code.trim() && !opts.lastMerge) {
-        warn("No code collected. Use --last-merge, --diff <ref>, --files <paths>, or stage changes with git add.");
+      if (!code.trim() && !opts.lastMerge && !opts.pr) {
+        warn("No code collected. Use --last-merge, --diff <ref>, --files <paths>, --pr <url>, or stage changes with git add.");
         warn("Quick start: specia scan --last-merge");
+      }
+
+      // Apply .speciaignore filtering
+      const ignorePatterns = loadIgnorePatterns(process.cwd());
+      if (ignorePatterns.length > 0 && code) {
+        const filtered = filterDiff(code, ignorePatterns);
+        const removedCount = (code.split(/(?=^diff --git )/m).length - filtered.split(/(?=^diff --git )/m).length);
+        if (removedCount > 0 && !isJsonMode()) {
+          dim(`  .speciaignore: excluded ${removedCount} file(s) from scan`);
+        }
+        code = filtered;
       }
 
       // Phase 2: submit result
@@ -303,13 +434,13 @@ export function registerScanCommand(program: Command): void {
           process.exitCode = 1;
           return;
         }
-        return submitScanResult(resolved.json, scanId, posture, source, speciaRoot);
+        return await submitScanResult(resolved.json, scanId, posture, source, speciaRoot);
       }
 
       // Opportunistic stdin
       const stdinJson = await tryStdinJson();
       if (stdinJson !== null) {
-        return submitScanResult(stdinJson, scanId, posture, source, speciaRoot);
+        return await submitScanResult(stdinJson, scanId, posture, source, speciaRoot);
       }
 
       // Generate prompt
@@ -333,7 +464,7 @@ export function registerScanCommand(program: Command): void {
                 client.complete("You are a senior application security engineer.", prompt)
               )
           );
-          return submitScanResult(llmResult.result, scanId, posture, source, speciaRoot);
+          return await submitScanResult(llmResult.result, scanId, posture, source, speciaRoot);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           error(`LLM call failed: ${msg}`);
@@ -383,13 +514,13 @@ export function registerScanCommand(program: Command): void {
     });
 }
 
-function submitScanResult(
+async function submitScanResult(
   raw: unknown,
   scanId: string,
   posture: string,
   source: string,
   speciaRoot: string | null,
-): void {
+): Promise<void> {
   try {
     const result = parseScanResult(raw);
     const timestamp = new Date().toISOString();
@@ -409,6 +540,35 @@ function submitScanResult(
         stub.risk_level = result.summary.risk_level;
         stub.findings_count = result.summary.findings_count;
         fs.writeFileSync(stubPath, JSON.stringify(stub, null, 2), "utf-8");
+      }
+
+      // Opportunistically store to Alejandría
+      try {
+        const store = new FileStore(speciaRoot);
+        if (store.isInitialized()) {
+          const config = store.readConfig();
+          if (config.memory.backend === "alejandria") {
+            const hasHighSeverity = result.findings.some(
+              (f) => f.severity === "critical" || f.severity === "high"
+            );
+            const memContent = [
+              `Security scan: ${source} (${scanId})`,
+              `Risk level: ${result.summary.risk_level}`,
+              `Findings: ${result.summary.findings_count}`,
+              "",
+              ...result.findings.map(
+                (f) => `[${f.severity.toUpperCase()}] ${f.title}: ${f.description.slice(0, 200)}`
+              ),
+            ].join("\n");
+            await tryStore(config.memory, memContent, {
+              topic_key: `specia/scan/${scanId}`,
+              topic: "security-scan",
+              importance: hasHighSeverity ? "high" : "medium",
+            });
+          }
+        }
+      } catch {
+        // Silent — Alejandría is best-effort, never blocks scan output
       }
     }
 

@@ -1,4 +1,4 @@
-<!-- BEGIN:specia-spec -->
+<!-- BEGIN:vt-spec -->
 ## SpecIA AppSec Orchestrator
 
 You have access to SpecIA, a security-aware spec-driven development CLI tool. When the user asks to plan, spec, or review a change, use SpecIA.
@@ -17,13 +17,13 @@ init -> [explore] -> propose -> spec -> [design] -> REVIEW (mandatory) -> tasks 
 
 | Phase | Sub-Agent | How it works |
 |-------|-----------|--------------|
-| Init | vt-init (inline OK) | Runs `specia init` CLI, creates `.specia/` |
+| Init | specia-init (inline OK) | Runs `specia init` CLI, creates `.specia/` |
 | Explore | specia-explore | Direct investigation, saves to Alejandría |
-| Propose | specia-propose | Creates `.specia/changes/{name}/` artifacts directly |
-| Spec | specia-spec | Writes `.specia/changes/{name}/spec.md` directly |
-| Design | specia-design | Writes `.specia/changes/{name}/design.md` directly |
+| Propose | vt-propose | Creates `.specia/changes/{name}/` artifacts directly |
+| Spec | vt-spec | Writes `.specia/changes/{name}/spec.md` directly |
+| Design | vt-design | Writes `.specia/changes/{name}/design.md` directly |
 | Review | specia-review | Writes `.specia/changes/{name}/review.md` directly |
-| Tasks | specia-tasks | Writes `.specia/changes/{name}/tasks.md` directly |
+| Tasks | vt-tasks | Writes `.specia/changes/{name}/tasks.md` directly |
 | Apply | specia-apply / specia-fleet | Writes code directly (fleet = parallel workers) |
 | Audit | specia-audit | Writes `.specia/changes/{name}/audit.md` directly |
 | Done | (inline OK) | Runs `specia done {name}` CLI to archive |
@@ -38,7 +38,7 @@ init -> [explore] -> propose -> spec -> [design] -> REVIEW (mandatory) -> tasks 
 
 ### Auto-Explore Triggers
 
-Before running specia-propose, check if exploration is needed. Exploration provides deep investigation and research for complex or security-sensitive changes.
+Before running vt-propose, check if exploration is needed. Exploration provides deep investigation and research for complex or security-sensitive changes.
 
 **Auto-trigger explore if ANY:**
 - User request contains security-sensitive keywords: "auth", "authentication", "authorization", "login", "signup", "password", "token", "jwt", "oauth", "saml", "sso", "payment", "billing", "checkout", "stripe", "paypal", "transaction", "encrypt", "decrypt", "crypto", "cipher", "hash", "salt", "secret", "credential", "api-key", "private-key", "upload", "file", "attachment", "multipart", "api", "endpoint", "route", "integration", "webhook", "admin", "superuser", "privilege", "permission", "role"
@@ -59,8 +59,8 @@ Before running specia-propose, check if exploration is needed. Exploration provi
 1. Inform user: "This appears to be a security-sensitive/complex change. Running exploration first..."
 2. Launch Task sub-agent for specia-explore: "Read `~/.claude/skills/specia/specia-explore.md` for instructions. Explore topic '{change_name}' for change '{change_name}'. Focus on: [security implications / integration patterns / architectural concerns based on keywords]. Save findings to Alejandría memory under topic `specia/explore/{change_name}`. Return: status, summary, key_findings."
 3. Wait for exploration findings
-4. Pass exploration summary to specia-propose Task sub-agent: "Previous exploration found: {summary}"
-5. specia-propose will retrieve full exploration details from Alejandría when crafting the proposal
+4. Pass exploration summary to vt-propose Task sub-agent: "Previous exploration found: {summary}"
+5. vt-propose will retrieve full exploration details from Alejandría when crafting the proposal
 
 ### How to Delegate
 
@@ -68,15 +68,15 @@ For each phase, launch a Task sub-agent with these instructions:
 
 **Explore** (auto-triggered for security-sensitive changes): "Read `~/.claude/skills/specia/specia-explore.md` for instructions. Explore topic '{change_name}' for change '{change_name}'. Focus on: {security implications / integration patterns / architectural concerns}. Save findings to Alejandría. Return: status, summary, key_findings."
 
-**Propose**: "Read `~/.claude/skills/specia/specia-propose.md` for instructions. Create proposal for change '{name}'. Intent: {intent}. Scope: {scope}. Write all artifacts directly to `.specia/changes/{name}/` (proposal.md, state.yaml). Pass `skip_audit: true` in the proposal frontmatter to opt-out of mandatory audit. Return: status, summary, next_recommended."
+**Propose**: "Read `~/.claude/skills/specia/vt-propose.md` for instructions. Create proposal for change '{name}'. Intent: {intent}. Scope: {scope}. Write all artifacts directly to `.specia/changes/{name}/` (proposal.md, state.yaml). Pass `skip_audit: true` in the proposal frontmatter to opt-out of mandatory audit. Return: status, summary, next_recommended."
 
-**Spec**: "Read `~/.claude/skills/specia/specia-spec.md` for instructions. Write specs for change '{name}'. Previous: {proposal_summary}. Write spec.md directly to `.specia/changes/{name}/spec.md`. Return: status, summary (req count + scenario count), next_recommended."
+**Spec**: "Read `~/.claude/skills/specia/vt-spec.md` for instructions. Write specs for change '{name}'. Previous: {proposal_summary}. Write spec.md directly to `.specia/changes/{name}/spec.md`. Return: status, summary (req count + scenario count), next_recommended."
 
-**Design** (optional): "Read `~/.claude/skills/specia/specia-design.md` for instructions. Create design for change '{name}'. Write design.md directly to `.specia/changes/{name}/design.md`. Return: status, summary, next_recommended."
+**Design** (optional): "Read `~/.claude/skills/specia/vt-design.md` for instructions. Create design for change '{name}'. Write design.md directly to `.specia/changes/{name}/design.md`. Return: status, summary, next_recommended."
 
 **Review** (MANDATORY): "Read `~/.claude/skills/specia/specia-review.md` for instructions. Security review for change '{name}'. Write review.md directly to `.specia/changes/{name}/review.md`. Include STRIDE, OWASP Top 10, and abuse cases. Return: status, risk_level, findings summary, next_recommended."
 
-**Tasks**: "Read `~/.claude/skills/specia/specia-tasks.md` for instructions. Generate tasks for change '{name}'. Write tasks.md directly to `.specia/changes/{name}/tasks.md`. Return: status, task count summary, next_recommended."
+**Tasks**: "Read `~/.claude/skills/specia/vt-tasks.md` for instructions. Generate tasks for change '{name}'. Write tasks.md directly to `.specia/changes/{name}/tasks.md`. Return: status, task count summary, next_recommended."
 
 **Apply** (implementation): Before delegating, read `.specia/changes/{name}/apply-manifest.yaml`. Check `pattern` and `fleet_recommendation.mode`:
 - If `pattern: fan-out` AND `fleet_recommendation.mode: "fleet"` → delegate to **specia-fleet**: "Read `~/.claude/agents/specia-fleet.md` for instructions. Orchestrate parallel fleet apply for change '{name}'. Manifest at `.specia/changes/{name}/apply-manifest.yaml`. Spawn workers per group, run specia-verify after. Return: status, summary, verify_result, next_recommended."
@@ -93,6 +93,8 @@ For each phase, launch a Task sub-agent with these instructions:
 ### Ad-hoc Security Commands (no specia init needed)
 
 These commands work on any git repo, with or without a `.specia/` project:
+
+> Alejandría note: scan and debate auto-store results when memory.backend = alejandria. Use `specia search <keyword>` to recall past findings before starting a review.
 
 | User says | Delegate to | How |
 |-----------|-------------|-----|
@@ -124,4 +126,4 @@ After compaction or new session: read `.specia/changes/{name}/state.yaml` to rec
 2. Includes STRIDE, OWASP Top 10, and abuse cases
 3. Posture (standard/elevated/paranoid) controls depth
 4. Stale reviews block task generation
-<!-- END:specia-spec -->
+<!-- END:vt-spec -->

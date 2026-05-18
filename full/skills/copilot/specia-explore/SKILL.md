@@ -191,6 +191,8 @@ Return EXACTLY this structure:
 - **DO NOT modify code** — exploration only
 - **ALWAYS read real code** — never guess
 - **MANDATORY**: Save to Alejandría if tied to change
+- **RECALL FIRST**: Before exploring, recall past findings for this project with `alejandria_mem_recall(query: "specia/{project} security gaps vulnerabilities", project: "{project}")` — this surfaces patterns found in previous scans/debates/reviews so you don't repeat work
+- **CROSS-PHASE CONTEXT**: Scan and debate results are also stored to Alejandría (when configured). Use `specia search <keyword>` to find them or recall with query `security scan findings ${topic}`
 
 ## Return Envelope
 

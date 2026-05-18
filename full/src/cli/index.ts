@@ -30,14 +30,17 @@ import { registerUpdateCommand } from "./commands/update.js";
 import { registerChangelogCommand } from "./commands/changelog.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
 import { BakeService } from "../services/bake.js";
-// import { registerDebateCommand } from "./commands/debate.js";
+import { registerDebateCommand } from "./commands/debate.js";
+import { registerScanCommand } from "./commands/scan.js";
+import { registerReportCommand } from "./commands/report.js";
+import { registerHistoryCommand } from "./commands/history.js";
 
 const program = new Command();
 
 program
   .name("specia")
   .description("Security-aware spec-driven development CLI")
-  .version("2.5.0")
+  .version("2.6.0")
   .option("--json", "Output structured JSON")
   .option("--quiet", "Suppress non-essential output")
   .hook("preAction", (_thisCommand, actionCommand) => {
@@ -72,7 +75,10 @@ registerFleetCommand(program);
 registerUpdateCommand(program);
 registerChangelogCommand(program);
 registerDoctorCommand(program);
-// registerDebateCommand(program);
+registerDebateCommand(program);
+registerScanCommand(program);
+registerReportCommand(program);
+registerHistoryCommand(program);
 
 // Handle @shortcut syntax before parsing
 async function handleShortcut() {

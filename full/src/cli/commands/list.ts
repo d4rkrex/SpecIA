@@ -41,6 +41,7 @@ const COMMANDS: CommandInfo[] = [
   // Utilities
   { name: 'search', description: 'Search past specs and security findings', phase: 'utilities' },
   { name: 'report', description: 'Security posture report from archived changes', phase: 'utilities' },
+  { name: 'history', description: 'Security findings trend over time', phase: 'utilities' },
   { name: 'stats', description: 'Show token usage and cost analytics', phase: 'utilities' },
   { name: 'status', description: 'Show current change status', phase: 'utilities' },
   { name: 'skills', description: 'List available SpecIA skills', phase: 'utilities' },

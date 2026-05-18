@@ -206,3 +206,41 @@ export function formatMemoryContext(memories: Memory[], maxExcerpts: number = 5)
     .slice(0, maxExcerpts)
     .map((m) => m.summary ?? m.content.slice(0, 300));
 }
+
+/**
+ * Build a memory hint for scan phase.
+ */
+export function buildScanHint(
+  config: MemoryConfig,
+  projectName: string,
+  scanId: string,
+  source: string,
+): MemoryHint {
+  return {
+    backend: config.backend === "engram" ? "engram" : config.backend,
+    recall_query: `security scan findings vulnerabilities ${source}`,
+    recall_scope: `specia/${projectName}`,
+    store_topic_key: `specia/${projectName}/scan/${scanId}`,
+    store_topic: "security-scan",
+    store_importance: "high",
+  };
+}
+
+/**
+ * Build a memory hint for debate phase.
+ */
+export function buildDebateHint(
+  config: MemoryConfig,
+  projectName: string,
+  debateId: string,
+  source: string,
+): MemoryHint {
+  return {
+    backend: config.backend === "engram" ? "engram" : config.backend,
+    recall_query: `security debate findings review ${source}`,
+    recall_scope: `specia/${projectName}`,
+    store_topic_key: `specia/${projectName}/debate/${debateId}`,
+    store_topic: "security-debate",
+    store_importance: "high",
+  };
+}

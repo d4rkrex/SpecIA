@@ -1,13 +1,13 @@
 {
   "name": "@appsec/specia",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "type": "module",
   "description": "Security-aware spec-driven development MCP server",
   "license": "MIT",
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/d4rkrex/SpecIA.git"
+    "url": "https://gitlab.veritran.net/appsec/vt-spec.git"
   },
   "keywords": [
     "mcp",

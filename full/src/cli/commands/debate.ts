@@ -189,7 +189,8 @@ Simulate a structured three-perspective debate on every security finding in the 
 ### For each finding (threat ID T-xx or finding ID):
 - Run through all three perspectives
 - Determine consensus_severity (may differ from original)
-- Classify calibration: "validated" | "escalated" | "de-escalated"
+- Classify calibration: "validated" | "escalated" | "de-escalated" | "false_positive"
+  - Use "false_positive" when both Offensive and Defensive agree the finding is not exploitable in this specific context
 - Flag needs_human_review: true if consensus could not be reached
 
 ## Required output (strict JSON, no markdown wrapper):
@@ -201,16 +202,17 @@ Simulate a structured three-perspective debate on every security finding in the 
       "original_severity": "high",
       "offensive_challenge": "<challenger's argument>",
       "defensive_response": "<validator's response>",
-      "consensus_severity": "high",
+      "consensus_severity": "info",
       "consensus_reached": true,
-      "calibration": "validated",
-      "notes": "<judge's reasoning>"
+      "calibration": "false_positive",
+      "notes": "<judge's reasoning — explain WHY it is FP in this context>"
     }
   ],
   "summary": {
     "escalated": <number>,
     "de_escalated": <number>,
     "validated": <number>,
+    "false_positives": <number>,
     "needs_human_review": ["T-xx", ...]
   }
 }
@@ -227,7 +229,7 @@ interface DebateEntry {
   defensive_response: string;
   consensus_severity: string;
   consensus_reached: boolean;
-  calibration: string;
+  calibration: "validated" | "escalated" | "de-escalated" | "false_positive";
   notes?: string;
 }
 
@@ -238,6 +240,7 @@ interface DebateResult {
     escalated: number;
     de_escalated: number;
     validated: number;
+    false_positives: number;
     needs_human_review: string[];
   };
 }
@@ -254,6 +257,7 @@ function parseDebateResult(raw: unknown): DebateResult {
 }
 
 function renderDebateMarkdown(changeName: string, result: DebateResult): string {
+  const fpCount = result.summary.false_positives ?? 0;
   const lines: string[] = [
     `---`,
     `debate_timestamp: "${new Date().toISOString()}"`,
@@ -262,6 +266,7 @@ function renderDebateMarkdown(changeName: string, result: DebateResult): string 
     `escalated: ${result.summary.escalated}`,
     `de_escalated: ${result.summary.de_escalated}`,
     `validated: ${result.summary.validated}`,
+    `false_positives: ${fpCount}`,
     `---`,
     ``,
     `# Debate Report: ${changeName}`,
@@ -276,6 +281,7 @@ function renderDebateMarkdown(changeName: string, result: DebateResult): string 
     `| Validated (unchanged) | ${result.summary.validated} |`,
     `| Escalated | ${result.summary.escalated} |`,
     `| De-escalated | ${result.summary.de_escalated} |`,
+    `| False Positives | ${fpCount} |`,
   ];
 
   if (result.summary.needs_human_review.length > 0) {
@@ -290,6 +296,8 @@ function renderDebateMarkdown(changeName: string, result: DebateResult): string 
       ? "↑ escalated"
       : d.calibration === "de-escalated"
       ? "↓ de-escalated"
+      : d.calibration === "false_positive"
+      ? "🚫 false positive"
       : "= validated";
 
     lines.push(

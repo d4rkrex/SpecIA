@@ -1,10 +1,10 @@
 /**
- * Unified memory operations for SpecIA.
+ * Unified memory operations for VT-Spec.
  *
  * Single entry point for all memory store/recall across phases.
  * Cascades: Alejandría (child process) → graceful no-op (local).
  *
- * When `backend === "engram"`, SpecIA's Node.js process cannot call
+ * When `backend === "engram"`, VT-Spec's Node.js process cannot call
  * Engram directly (it's an MCP tool in the agent runtime). The tool
  * response includes `memory_hint` so the orchestrating agent can
  * perform memory operations using its own MCP tools.
@@ -20,7 +20,7 @@ import type { Memory, StoreOpts, RecallOpts } from "../types/memory.js";
 
 export interface MemoryOpResult<T> {
   data: T;
-  backend: "alejandria" | "engram" | "local";
+  backend: "alejandria" | "engram" | "local" | "auto";
   error?: string;
 }
 
@@ -29,7 +29,7 @@ export interface MemoryOpResult<T> {
  * operations to perform when backend is "engram".
  */
 export interface MemoryHint {
-  backend: "alejandria" | "engram" | "local";
+  backend: "alejandria" | "engram" | "local" | "auto";
   /** Suggested recall query for the agent to execute via MCP tools. */
   recall_query?: string;
   /** Suggested recall topic/scope for filtering. */
@@ -47,6 +47,8 @@ export interface MemoryHint {
 /**
  * Try to recall memories. Cascades: Alejandría → no-op.
  *
+ * "auto" backend: tries Alejandría first, falls back to local if unavailable.
+ *
  * Uses semantic/content query + optional scope (topic filter).
  * Does NOT use topic_key as query — topic_key is for storage upsert.
  */
@@ -55,6 +57,23 @@ export async function tryRecall(
   query: string,
   opts?: RecallOpts,
 ): Promise<MemoryOpResult<Memory[]>> {
+  // "auto" backend: try Alejandría, fallback to local
+  if (config.backend === "auto") {
+    try {
+      const client = getMemoryClient(config);
+      const results = await client.recall(query, opts);
+      return { data: results, backend: "auto" };
+    } catch (err) {
+      // Fail-soft: degrade to local silently
+      return {
+        data: [],
+        backend: "auto",
+        error: `alejandria_unavailable (degraded to local): ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
+  // Explicit "alejandria" backend: attempt only, report failure
   if (config.backend === "alejandria") {
     try {
       const client = getMemoryClient(config);
@@ -76,6 +95,8 @@ export async function tryRecall(
 /**
  * Try to store a memory. Cascades: Alejandría → no-op.
  *
+ * "auto" backend: tries Alejandría first, falls back to local if unavailable.
+ *
  * Returns the stored memory ID, or null if storage was skipped/failed.
  */
 export async function tryStore(
@@ -83,6 +104,23 @@ export async function tryStore(
   content: string,
   opts: StoreOpts,
 ): Promise<MemoryOpResult<string | null>> {
+  // "auto" backend: try Alejandría, fallback to local
+  if (config.backend === "auto") {
+    try {
+      const client = getMemoryClient(config);
+      const id = await client.store(content, opts);
+      return { data: id, backend: "auto" };
+    } catch (err) {
+      // Fail-soft: degrade to local silently
+      return {
+        data: null,
+        backend: "auto",
+        error: `alejandria_unavailable (degraded to local): ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
+  // Explicit "alejandria" backend: attempt only, report failure
   if (config.backend === "alejandria") {
     try {
       const client = getMemoryClient(config);
@@ -116,8 +154,8 @@ export function buildProposeHint(
   return {
     backend: config.backend === "engram" ? "engram" : config.backend,
     recall_query: `proposals architecture decisions ${intent}`,
-    recall_scope: `specia/${projectName}`,
-    store_topic_key: `specia/${projectName}/proposal/${changeName}`,
+    recall_scope: `vtspec/${projectName}`,
+    store_topic_key: `vtspec/${projectName}/proposal/${changeName}`,
     store_topic: "proposals",
     store_importance: "medium",
   };
@@ -134,8 +172,8 @@ export function buildSpecHint(
   return {
     backend: config.backend === "engram" ? "engram" : config.backend,
     recall_query: `spec requirements scenarios ${projectName}`,
-    recall_scope: `specia/${projectName}`,
-    store_topic_key: `specia/${projectName}/spec/${changeName}`,
+    recall_scope: `vtspec/${projectName}`,
+    store_topic_key: `vtspec/${projectName}/spec/${changeName}`,
     store_topic: "specs",
     store_importance: "medium",
   };
@@ -152,8 +190,8 @@ export function buildDesignHint(
   return {
     backend: config.backend === "engram" ? "engram" : config.backend,
     recall_query: `design architecture decisions patterns ${projectName}`,
-    recall_scope: `specia/${projectName}`,
-    store_topic_key: `specia/${projectName}/design/${changeName}`,
+    recall_scope: `vtspec/${projectName}`,
+    store_topic_key: `vtspec/${projectName}/design/${changeName}`,
     store_topic: "designs",
     store_importance: "medium",
   };
@@ -170,8 +208,8 @@ export function buildReviewHint(
   return {
     backend: config.backend === "engram" ? "engram" : config.backend,
     recall_query: `security review findings vulnerabilities ${projectName}`,
-    recall_scope: `specia/${projectName}`,
-    store_topic_key: `specia/${projectName}/security/${changeName}`,
+    recall_scope: `vtspec/${projectName}`,
+    store_topic_key: `vtspec/${projectName}/security/${changeName}`,
     store_topic: "security-review",
     store_importance: "high",
   };
@@ -188,8 +226,8 @@ export function buildAuditHint(
   return {
     backend: config.backend === "engram" ? "engram" : config.backend,
     recall_query: `audit findings compliance ${projectName}`,
-    recall_scope: `specia/${projectName}`,
-    store_topic_key: `specia/${projectName}/audit/${changeName}`,
+    recall_scope: `vtspec/${projectName}`,
+    store_topic_key: `vtspec/${projectName}/audit/${changeName}`,
     store_topic: "spec-audit",
     store_importance: "medium",
   };
@@ -219,8 +257,8 @@ export function buildScanHint(
   return {
     backend: config.backend === "engram" ? "engram" : config.backend,
     recall_query: `security scan findings vulnerabilities ${source}`,
-    recall_scope: `specia/${projectName}`,
-    store_topic_key: `specia/${projectName}/scan/${scanId}`,
+    recall_scope: `vtspec/${projectName}`,
+    store_topic_key: `vtspec/${projectName}/scan/${scanId}`,
     store_topic: "security-scan",
     store_importance: "high",
   };
@@ -238,8 +276,8 @@ export function buildDebateHint(
   return {
     backend: config.backend === "engram" ? "engram" : config.backend,
     recall_query: `security debate findings review ${source}`,
-    recall_scope: `specia/${projectName}`,
-    store_topic_key: `specia/${projectName}/debate/${debateId}`,
+    recall_scope: `vtspec/${projectName}`,
+    store_topic_key: `vtspec/${projectName}/debate/${debateId}`,
     store_topic: "security-debate",
     store_importance: "high",
   };

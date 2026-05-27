@@ -1,6 +1,6 @@
 /**
- * SpecIA configuration types.
- * Maps to .specia/config.yaml schema (Design Decision 2).
+ * VT-Spec configuration types.
+ * Maps to .vtspec/config.yaml schema (Design Decision 2).
  *
  * v0.2: Added GuardianConfig, CliConfig, WorkflowConfig (Decisions 15, 18, 9).
  */
@@ -9,7 +9,7 @@
 export type SecurityPosture = "standard" | "elevated" | "paranoid";
 
 /** Memory backend — Alejandria/Engram enhance but are never required. */
-export type MemoryBackend = "alejandria" | "engram" | "local";
+export type MemoryBackend = "alejandria" | "engram" | "local" | "auto";
 
 /** Guardian hook validation mode. */
 export type GuardianMode = "strict" | "warn";
@@ -124,12 +124,12 @@ export interface EconomicsConfig {
 /**
  * Per-phase LLM model routing configuration.
  *
- * Maps each SpecIA phase to a preferred model identifier. The orchestrating agent
+ * Maps each VT-Spec phase to a preferred model identifier. The orchestrating agent
  * reads the model hint from the phase's generated prompt and routes accordingly.
  * Inspired by Gentle-AI's per-phase model assignment pattern.
  *
  * Values are free-form strings validated against /^[a-zA-Z0-9\-\.\/:]+$/ (max 100 chars).
- * SpecIA does not verify model existence — only format is validated.
+ * VT-Spec does not verify model existence — only format is validated.
  */
 export interface ModelsConfig {
   spec?: string;
@@ -139,8 +139,13 @@ export interface ModelsConfig {
   audit?: string;
 }
 
+/** v2.6: VeriScan telemetry integration configuration. */
+export interface VeriScanConfig {
+  webhook_url: string;
+}
+
 /**
- * Root SpecIA configuration — the full schema for .specia/config.yaml.
+ * Root VT-Spec configuration — the full schema for .vtspec/config.yaml.
  *
  * Spec refs: Domain 5 (config.yaml Schema), Domain 10 (Exactly 4 Questions)
  * Design refs: Decision 2
@@ -162,4 +167,6 @@ export interface VtspecConfig {
   economics?: EconomicsConfig;
   /** v2.4: Per-phase LLM model routing. Optional — absent means no model preference. */
   models?: ModelsConfig;
+  /** v2.6: VeriScan telemetry integration. Optional — fail-silent, zero dev impact. */
+  veriscan?: VeriScanConfig;
 }

@@ -79,7 +79,8 @@ export class MemoryClient {
   async connect(): Promise<boolean> {
     if (this.connected) return true;
     if (this.connecting) return false;
-    if (this.config.backend !== "alejandria") return false;
+    // "auto" mode uses Alejandría if available, so treat it like "alejandria"
+    if (this.config.backend !== "alejandria" && this.config.backend !== "auto") return false;
 
     this.connecting = true;
 
@@ -110,7 +111,7 @@ export class MemoryClient {
       const initResult = await this.sendRequest("initialize", {
         protocolVersion: "2024-11-05",
         capabilities: {},
-        clientInfo: { name: "specia", version: "0.1.0" },
+        clientInfo: { name: "vtspec", version: "0.1.0" },
       });
 
       if (!initResult) {
@@ -497,7 +498,7 @@ let _singleton: MemoryClient | null = null;
 /**
  * Get or create the global MemoryClient singleton.
  *
- * Uses the config from .specia/config.yaml to determine whether
+ * Uses the config from .vtspec/config.yaml to determine whether
  * Alejandria is enabled and how to connect.
  *
  * If config has changed (different backend or command), the existing

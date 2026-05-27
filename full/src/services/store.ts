@@ -1,8 +1,8 @@
 /**
- * FileStore — .specia/ directory management.
+ * FileStore — .vtspec/ directory management.
  *
  * All file writes are atomic: write to .tmp file, then rename.
- * This is the source of truth for SpecIA artifacts.
+ * This is the source of truth for VT-Spec artifacts.
  *
  * Spec refs: Domain 5 (Directory Structure, Atomic File Writes)
  * Design refs: Decision 2 (FileStore Service API)
@@ -25,7 +25,7 @@ import type {
 /** The well-known SHA256 hash of the empty string — sentinel value for zero-file audits. */
 const EMPTY_SHA256_SENTINEL = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
-const SPECIA_DIR = ".specia";
+const VTSPEC_DIR = ".vtspec";
 const CONFIG_FILE = "config.yaml";
 const CONTEXT_FILE = "context.md";
 const CHANGES_DIR = "changes";
@@ -50,7 +50,7 @@ const ConfigSchema = z.object({
     posture: z.enum(["standard", "elevated", "paranoid"]),
   }),
   memory: z.object({
-    backend: z.enum(["alejandria", "engram", "local"]),
+    backend: z.enum(["alejandria", "engram", "local", "auto"]),
     alejandria_cmd: z.string().optional(),
   }),
   // v0.2: Guardian hook config (optional — absent means disabled)
@@ -108,6 +108,12 @@ const ConfigSchema = z.object({
       audit: z.string().regex(/^[a-zA-Z0-9\-.\/:]+$/, "Model identifier contains invalid characters").max(100).optional(),
     })
     .optional(),
+  // v2.6: VeriScan telemetry integration (optional — fail-silent, zero dev impact)
+  veriscan: z
+    .object({
+      webhook_url: z.string().url().max(256),
+    })
+    .optional(),
 });
 
 /**
@@ -157,23 +163,23 @@ const ChangeStateSchema = z.object({
 }).passthrough(); // Allow extra fields to pass through for forward compatibility
 
 export class FileStore {
-  private readonly speciaPath: string;
+  private readonly vtspecPath: string;
 
   constructor(readonly rootDir: string) {
-    this.speciaPath = path.join(rootDir, SPECIA_DIR);
+    this.vtspecPath = path.join(rootDir, VTSPEC_DIR);
   }
 
   // ── Project-level ──────────────────────────────────────────────────
 
-  /** Check if .specia/config.yaml exists. */
+  /** Check if .vtspec/config.yaml exists. */
   isInitialized(): boolean {
-    return fs.existsSync(path.join(this.speciaPath, CONFIG_FILE));
+    return fs.existsSync(path.join(this.vtspecPath, CONFIG_FILE));
   }
 
-  /** Read and parse .specia/config.yaml with Zod validation. */
+  /** Read and parse .vtspec/config.yaml with Zod validation. */
   readConfig(): VtspecConfig {
     const raw = fs.readFileSync(
-      path.join(this.speciaPath, CONFIG_FILE),
+      path.join(this.vtspecPath, CONFIG_FILE),
       "utf-8",
     );
     const parsed = parseYaml(raw);
@@ -188,37 +194,37 @@ export class FileStore {
 
   /** Write config.yaml atomically. */
   writeConfig(config: VtspecConfig): void {
-    const filePath = path.join(this.speciaPath, CONFIG_FILE);
+    const filePath = path.join(this.vtspecPath, CONFIG_FILE);
     this.atomicWrite(filePath, stringifyYaml(config));
   }
 
-  /** Read .specia/context.md as plain string. Returns null if missing. */
+  /** Read .vtspec/context.md as plain string. Returns null if missing. */
   readContext(): string | null {
-    const filePath = path.join(this.speciaPath, CONTEXT_FILE);
+    const filePath = path.join(this.vtspecPath, CONTEXT_FILE);
     if (!fs.existsSync(filePath)) return null;
     return fs.readFileSync(filePath, "utf-8");
   }
 
   /** Write context.md atomically. */
   writeContext(content: string): void {
-    const filePath = path.join(this.speciaPath, CONTEXT_FILE);
+    const filePath = path.join(this.vtspecPath, CONTEXT_FILE);
     this.atomicWrite(filePath, content);
   }
 
   /**
-   * Ensure the full .specia/ directory structure exists.
-   * Called by specia_init.
+   * Ensure the full .vtspec/ directory structure exists.
+   * Called by vtspec_init.
    */
   ensureDirectoryStructure(): void {
-    fs.mkdirSync(path.join(this.speciaPath, CHANGES_DIR), { recursive: true });
-    fs.mkdirSync(path.join(this.speciaPath, SPECS_DIR), { recursive: true });
+    fs.mkdirSync(path.join(this.vtspecPath, CHANGES_DIR), { recursive: true });
+    fs.mkdirSync(path.join(this.vtspecPath, SPECS_DIR), { recursive: true });
   }
 
   // ── Change-level ───────────────────────────────────────────────────
 
   /** List all changes with their current state. */
   listChanges(): ChangeInfo[] {
-    const changesPath = path.join(this.speciaPath, CHANGES_DIR);
+    const changesPath = path.join(this.vtspecPath, CHANGES_DIR);
     if (!fs.existsSync(changesPath)) return [];
 
     const entries = fs.readdirSync(changesPath, { withFileTypes: true });
@@ -244,7 +250,7 @@ export class FileStore {
    * v0.5: Validates with Zod schema (T-01: prevent state.yaml tampering). */
   getChangeState(name: string): ChangeState | null {
     const filePath = path.join(
-      this.speciaPath,
+      this.vtspecPath,
       CHANGES_DIR,
       name,
       STATE_FILE,
@@ -270,7 +276,7 @@ export class FileStore {
    *                      If not provided, reads from disk.
    */
   setChangeState(name: string, state: ChangeState, existingState?: ChangeState | null): void {
-    const changeDir = path.join(this.speciaPath, CHANGES_DIR, name);
+    const changeDir = path.join(this.vtspecPath, CHANGES_DIR, name);
     fs.mkdirSync(changeDir, { recursive: true });
 
     // Use provided existing state or read from disk
@@ -323,7 +329,7 @@ export class FileStore {
   /** Read an artifact file (proposal.md, spec.md, etc.). Returns null if missing. */
   readArtifact(change: string, artifact: ArtifactType): string | null {
     const filePath = path.join(
-      this.speciaPath,
+      this.vtspecPath,
       CHANGES_DIR,
       change,
       `${artifact}.md`,
@@ -338,7 +344,7 @@ export class FileStore {
     artifact: ArtifactType,
     content: string,
   ): void {
-    const changeDir = path.join(this.speciaPath, CHANGES_DIR, change);
+    const changeDir = path.join(this.vtspecPath, CHANGES_DIR, change);
     fs.mkdirSync(changeDir, { recursive: true });
     const filePath = path.join(changeDir, `${artifact}.md`);
     this.atomicWrite(filePath, content);
@@ -353,11 +359,11 @@ export class FileStore {
     manifestName: string,
     content: string,
   ): string {
-    const changeDir = path.join(this.speciaPath, CHANGES_DIR, change);
+    const changeDir = path.join(this.vtspecPath, CHANGES_DIR, change);
     fs.mkdirSync(changeDir, { recursive: true });
     const filePath = path.join(changeDir, `${manifestName}.yaml`);
     this.atomicWrite(filePath, content);
-    return `.specia/changes/${change}/${manifestName}.yaml`;
+    return `.vtspec/changes/${change}/${manifestName}.yaml`;
   }
 
   /**
@@ -365,7 +371,7 @@ export class FileStore {
    */
   readManifest(change: string, manifestName: string): string | null {
     const filePath = path.join(
-      this.speciaPath,
+      this.vtspecPath,
       CHANGES_DIR,
       change,
       `${manifestName}.yaml`,
@@ -376,9 +382,9 @@ export class FileStore {
 
   /**
    * Archive a completed change:
-   * 1. Copy spec.md to .specia/specs/{name}.md with review + audit frontmatter
-   * 2. v0.6: Preserve full audit.md as .specia/specs/{name}.audit.md (R-01, AC-004)
-   * 3. v0.6: Preserve full review.md as .specia/specs/{name}.review.md (R-01)
+   * 1. Copy spec.md to .vtspec/specs/{name}.md with review + audit frontmatter
+   * 2. v0.6: Preserve full audit.md as .vtspec/specs/{name}.audit.md (R-01, AC-004)
+   * 3. v0.6: Preserve full review.md as .vtspec/specs/{name}.review.md (R-01)
    * 4. Remove changes/{name}/ directory
    *
    * v0.3: Include audit frontmatter when audit.md exists (Design Decision 14).
@@ -386,9 +392,9 @@ export class FileStore {
    */
   /**
    * Archive a completed change:
-   * 1. Copy spec.md to .specia/specs/{name}.md with review + audit frontmatter
-   * 2. v0.6: Preserve full audit.md as .specia/specs/{name}.audit.md (R-01, AC-004)
-   * 3. v0.6: Preserve full review.md as .specia/specs/{name}.review.md (R-01)
+   * 1. Copy spec.md to .vtspec/specs/{name}.md with review + audit frontmatter
+   * 2. v0.6: Preserve full audit.md as .vtspec/specs/{name}.audit.md (R-01, AC-004)
+   * 3. v0.6: Preserve full review.md as .vtspec/specs/{name}.review.md (R-01)
    * 4. Remove changes/{name}/ directory
    *
    * v0.7: Returns the absolute path to the archived spec file (fix-done-verification).
@@ -398,7 +404,7 @@ export class FileStore {
    * @returns Absolute path to the archived spec file
    */
   archiveChange(name: string, opts?: { force?: boolean }): string {
-    const changeDir = path.join(this.speciaPath, CHANGES_DIR, name);
+    const changeDir = path.join(this.vtspecPath, CHANGES_DIR, name);
     const spec = this.readArtifact(name, "spec");
     const review = this.readArtifact(name, "review");
     const audit = this.readArtifact(name, "audit");
@@ -469,18 +475,18 @@ export class FileStore {
     }
     archivedContent += spec;
 
-    const archivePath = path.join(this.speciaPath, SPECS_DIR, `${name}.md`);
+    const archivePath = path.join(this.vtspecPath, SPECS_DIR, `${name}.md`);
     this.atomicWrite(archivePath, archivedContent);
 
     // R-01 / AC-004: Preserve full audit.md as a separate archived file
     if (audit) {
-      const auditArchivePath = path.join(this.speciaPath, SPECS_DIR, `${name}.audit.md`);
+      const auditArchivePath = path.join(this.vtspecPath, SPECS_DIR, `${name}.audit.md`);
       this.atomicWrite(auditArchivePath, audit);
     }
 
     // R-01: Preserve full review.md as a separate archived file
     if (review) {
-      const reviewArchivePath = path.join(this.speciaPath, SPECS_DIR, `${name}.review.md`);
+      const reviewArchivePath = path.join(this.vtspecPath, SPECS_DIR, `${name}.review.md`);
       this.atomicWrite(reviewArchivePath, review);
     }
 
